@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Task 2 application shell implemented, plus future architecture direction. Product domains and integrations described as planned below are not implemented.
+Status: application shell implemented and deployed to Vercel; product workflows remain planned. Product domains and integrations described as planned below are not implemented.
 
 ## Current application
 
@@ -23,6 +23,17 @@ Status: Task 2 application shell implemented, plus future architecture direction
 - Semantic header/navigation/main/footer, a skip link, visible keyboard focus, labelled theme selector, and `aria-current` active navigation indicators.
 - Appearance offers system/light/dark, follows system changes, persists a validated preference under `cloud-agent-theme-v1`, and synchronizes across tabs. Blocked storage falls back to in-memory preferences. A small static head script resolves the theme before paint; hydration suppression is limited to the expected root theme-attribute difference. CSS honors system appearance even without JavaScript.
 - The hub is a public placeholder without private information. Authentication must precede private-data functionality. Theme preference is local browser UI state, not an account setting.
+
+## Production hosting — Task 3B
+
+- Public production URL: https://cloud-engineering-agent.vercel.app.
+- Vercel project `cloud-engineering-agent` in personal Hobby scope `tayken05s-projects`; linked to private GitHub repository `tayken05/cloud-engineering-agent`.
+- Git production branch: `main`. The configuration commit triggered a production deployment automatically from GitHub, confirming private-repository access. Other branches retain Vercel's default preview behavior; no preview branch deployment has been created or tested in this task.
+- Repository root is the build root. `vercel.json` records Next.js, `npm ci`, and `npm run build`; the existing build script selects Webpack. Vercel project settings use Node.js `24.x`, and deployed function metadata confirms `nodejs24.x`. Vercel controls patch updates within that major.
+- No application environment variables or external integrations are configured. CLI linking generated an OIDC credential in ignored `.env.local`; `.vercel/` is also ignored. Neither is committed or uploaded through Git.
+- The canonical production domain is public. Team, branch, and immutable deployment aliases may require Vercel Authentication; keep deployment protection intact and use authorized Vercel tooling when necessary.
+- No paid plan, add-on, database, AI service, or application authentication was added. The public hub remains an empty placeholder, without private information.
+- Git-based documentation/configuration updates must be committed and pushed normally, then verified against the resulting production commit. No force-push or history rewrite.
 
 ## Planned module boundaries
 

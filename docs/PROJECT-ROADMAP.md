@@ -20,6 +20,16 @@ This roadmap records future scope, not authorization to implement it. Work proce
 - No live data, AI processing, publishing, authentication, integrations, or private information. Feature workflows remain planned.
 - Verification passed: lint, strict types, production build, development serving, all twelve routes, thirteen HTTP regression tests, responsive widths from 320px to 1440px, mobile menu interactions, and browser appearance behavior. Stop for review; future phases remain unauthorized.
 
+## Task 3A: Private GitHub repository — completed
+
+The existing history and approved shell are committed on `main` in private repository `tayken05/cloud-engineering-agent`. Source, documentation, and lockfile are tracked; secrets and build artifacts remain ignored.
+
+## Task 3B: Vercel integration and production hosting — completed
+
+Project `cloud-engineering-agent` in personal Hobby scope `tayken05s-projects` uses the private GitHub repository, production branch `main`, Node.js `24.x`, repository-root `npm ci`, and the existing Webpack production build. Main-push deployment was observed; other branches retain the default preview workflow, not separately tested here. Public URL: https://cloud-engineering-agent.vercel.app.
+
+Production verification passed: READY Git-sourced build, all twelve routes returning 200, unknown-route 404, stylesheet/static assets, desktop/mobile navigation, persistent/system themes, and no browser errors. Sensitive file paths returned 404, and the deployment runtime error query returned no logs. Documentation is committed and pushed normally; verify the resulting deployment against latest GitHub main before reporting task completion. No databases, authentication, AI, ingestion, or functional dashboard work is included.
+
 ## Planned phase: Private access and product workflows
 
 Specify access control and privacy boundaries for the Personal Tech Intelligence Hub before storing or exposing private information. Authentication and functional dashboard data remain future tasks.
@@ -50,7 +60,7 @@ Evaluate scheduled and durable background processing, Telegram Bot API, and Brow
 
 ## Planned phase: Hosting and communities
 
-Evaluate Vercel hosting and operational requirements; deployment requires explicit approval. Plan future Telegram and Discord engineering communities separately from the initial platform. Discord integration details are undecided. Preserve separation from the Football X Agent in every phase.
+Vercel hosts the visual shell as recorded in Task 3B. Future deployment and operational changes still require task authorization. Plan future Telegram and Discord engineering communities separately from the initial platform. Discord integration details are undecided. Preserve separation from the Football X Agent in every phase.
 
 ## Completion gate for each authorized task
 
