@@ -1,17 +1,28 @@
 # Architecture
 
-Status: initialized application foundation plus future architecture direction. Product domains and integrations described as planned below are not implemented.
+Status: Task 2 application shell implemented, plus future architecture direction. Product domains and integrations described as planned below are not implemented.
 
 ## Current application
 
 - Next.js 16 App Router with React and strict TypeScript on Node.js 24 LTS.
 - Development and production build use Next.js's supported Webpack mode. Tailwind CSS uses its official PostCSS plugin and root `postcss.config.mjs`.
 - npm provides dependency management; `package-lock.json` is committed for reproducible installs with `npm ci`.
-- `src/app/` holds the root layout, starter page, and global Tailwind CSS.
+- `src/app/` holds the shared root layout, twelve explicit routes, and global Tailwind CSS with light/dark design tokens.
 - `@/*` resolves to `src/*`.
 - Root configuration contains Next.js, TypeScript, and ESLint settings.
 - `docs/` contains product requirements, roadmap, architecture, and decisions. Root `AGENTS.md` governs coding-agent work.
-- The current starter does not implement a dashboard, API integration, private hub, authentication, database, or jobs.
+- The dashboard is a static introduction to the four pillars. Eleven other routes provide descriptive empty states; no research, content, engagement, or private-data workflows are implemented. API integrations, authentication, databases, and jobs remain planned.
+
+## Implemented application shell
+
+- `src/components/shell/`: Server Component `AppShell`, with client `Header`, `Navigation`, and `ThemeControl` for pathname awareness and browser preferences.
+- `src/components/workspace/`: shared Server Components `PageLayout`, `FeaturePage`, and decorative SVG `Icon`; dashboard cards are server-rendered.
+- `src/lib/workspace.ts`: typed presentation catalog for navigation labels, groups, and empty-state descriptions. No provider or business logic.
+- Explicit routes: `/`, `/tech-hub`, `/trending`, `/stories`, `/ideas`, `/studio`, `/learning-series`, `/posts`, `/inbox`, `/analytics`, `/sources`, `/settings`. Feature pages delegate to `FeaturePage` and have individual metadata.
+- Desktop sidebar at widths of 1024px and above; native expandable mobile navigation below that breakpoint, with Escape dismissal and closure after link activation. Dashboard cards become one column below 640px.
+- Semantic header/navigation/main/footer, a skip link, visible keyboard focus, labelled theme selector, and `aria-current` active navigation indicators.
+- Appearance offers system/light/dark, follows system changes, persists a validated preference under `cloud-agent-theme-v1`, and synchronizes across tabs. Blocked storage falls back to in-memory preferences. A small static head script resolves the theme before paint; hydration suppression is limited to the expected root theme-attribute difference. CSS honors system appearance even without JavaScript.
+- The hub is a public placeholder without private information. Authentication must precede private-data functionality. Theme preference is local browser UI state, not an account setting.
 
 ## Planned module boundaries
 
@@ -63,4 +74,4 @@ Keep secrets outside source control and server-side; ignore environment files, p
 
 ## Verification strategy
 
-Run `npm run lint`, `npm run typecheck`, and `npm run build` after changes. Confirm development startup and a successful HTTP response for initialization. Add automated tests when meaningful business behavior is introduced; no test framework is needed for a static empty scaffold. Do not suppress errors, ignore build failures, or add assertions that merely mirror implementation.
+Run `npm run lint`, `npm run typecheck`, and `npm run build` after changes. Confirm development startup, HTTP success for all twelve routes, active navigation, mobile menu operation, theme persistence/system appearance, and responsive rendering. `tests/shell.test.mjs` uses Node's built-in runner for HTTP route/landmark checks and unknown-route behavior against a running local server (`npm run test:shell`, default port 3100). Use browser automation for shell interactions; no additional test-framework dependency is installed. Add durable behavior tests alongside future business features. Do not suppress errors, ignore build failures, or add assertions that merely mirror implementation.

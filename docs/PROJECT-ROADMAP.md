@@ -2,18 +2,27 @@
 
 This roadmap records future scope, not authorization to implement it. Work proceeds one assigned task at a time, with build, test, verification, and review before the next task. Future phases can be revised by the technical architect.
 
-## Task 1: Foundation — current scope
+## Task 1: Foundation — completed
 
 - Verify environment and repository boundaries; use Node.js 24 LTS.
 - Generate Next.js 16 App Router with React, strict TypeScript, Tailwind CSS, ESLint, npm lockfile, `src/`, and `@/*`.
 - Create root `AGENTS.md` and the four required documents.
 - Establish reproducible runtime and verification commands, initialize local Git, and exclude secrets.
 - Verify ESLint, TypeScript, production build, development server startup, and documentation completeness.
-- Stop and wait for review. The scaffold has no implemented product features.
+- Stop and wait for review. The foundation originally contained an empty scaffold.
 
-## Planned phase: Product structure and private access
+## Task 2: Application shell — implemented
 
-Define navigation and dashboard requirements only when authorized. Specify access control and privacy boundaries for the Personal Tech Intelligence Hub before storing or exposing private information. Authentication and dashboard implementation remain future tasks.
+- Reusable desktop sidebar, responsive mobile navigation, current-page header, shared page layout, and descriptive empty states.
+- All twelve requested routes, active navigation indicators, semantic landmarks, skip link, and keyboard focus styles.
+- Introductory dashboard with links to the four product pillars, honest disconnected status, and independent teaching-style descriptions.
+- Browser-local system/light/dark appearance, persistent preferences, and system-theme updates.
+- No live data, AI processing, publishing, authentication, integrations, or private information. Feature workflows remain planned.
+- Verification passed: lint, strict types, production build, development serving, all twelve routes, thirteen HTTP regression tests, responsive widths from 320px to 1440px, mobile menu interactions, and browser appearance behavior. Stop for review; future phases remain unauthorized.
+
+## Planned phase: Private access and product workflows
+
+Specify access control and privacy boundaries for the Personal Tech Intelligence Hub before storing or exposing private information. Authentication and functional dashboard data remain future tasks.
 
 ## Planned phase: Persistence and verified intelligence
 

@@ -40,6 +40,33 @@ The live audit reports five high-severity development-tool findings along this s
 
 Use compatible stable releases, not canary, beta, preview, or experimental releases. The lockfile records exact installed versions. Keep runtime and type definitions aligned with Node.js 24. Read current official documentation before introducing or changing framework and integration behavior. Review upgrades intentionally rather than installing unrelated dependencies.
 
+## Task 1B dependency and tooling review — 2026-10-12
+
+Live `npm audit --omit=dev` reports **zero vulnerabilities**. Full `npm audit` exits with status 1 and reports **five high-severity package findings from one underlying advisory**, not five independent vulnerabilities. `npm ls` and `npm explain braces` confirm the complete installed path:
+
+`cloud-engineering-agent` → `eslint-config-next@16.4.0` → `@next/eslint-plugin-next@16.4.0` → `fast-glob@3.3.1` → `micromatch@4.0.8` → `braces@3.0.3`.
+
+All five affected package entries belong to development lint tooling. The lockfile marks `braces` as `dev: true`; the current production server and page file traces contain none of this chain. Application source imports none of these packages and implements no user-input processing. The Next lint plugin's `getRootDirs` passes configured `settings.next.rootDir` patterns to `fast-glob`; our ESLint configuration does not set that option and uses the trusted working directory instead. There is no identified path from an HTTP user input to this vulnerable instance in the current application. Development dependencies can remain physically present in a full installation, so classification alone does not guarantee future runtime isolation. Reassess if runtime imports, deployment packaging, or untrusted glob/configuration inputs change.
+
+The advisory describes stack-exhaustion denial of service from deeply nested brace patterns. Fresh registry metadata still lists `braces@3.0.3` as latest, and the advisory lists no patched version. Accept this temporarily for local development with trusted repository/configuration inputs. Do not force npm's proposed `eslint-config-next@14.2.35` downgrade, add unsupported overrides, or hide the audit. Review when a patched braces release or a compatible Next lint dependency chain becomes available, and before deployment.
+
+Fresh stable registry metadata confirms these ESLint constraints:
+
+| Package | Latest stable checked | ESLint peer range | ESLint 10 |
+| --- | --- | --- | --- |
+| `eslint` | 10.12.0 | Not applicable | Current major |
+| `eslint-config-next` | 16.4.0 | `>=9.0.0` | Allowed directly |
+| `eslint-plugin-react` | 7.37.5 | `^3 \|\| ^4 \|\| ^5 \|\| ^6 \|\| ^7 \|\| ^8 \|\| ^9.7` | Blocked |
+| `eslint-plugin-jsx-a11y` | 6.10.2 | `^3 \|\| ^4 \|\| ^5 \|\| ^6 \|\| ^7 \|\| ^8 \|\| ^9` | Blocked |
+| `eslint-plugin-import` | 2.32.0 | `^2 \|\| ^3 \|\| ^4 \|\| ^5 \|\| ^6 \|\| ^7.2.0 \|\| ^8 \|\| ^9` | Blocked |
+| `typescript-eslint` | 8.71.2 | `^8.57.0 \|\| ^9.0.0 \|\| ^10.0.0` | Allowed |
+
+Installed `eslint-plugin-react-hooks@7.1.1` also permits ESLint 10; it is not a blocker. Retain ESLint 9.39.5 temporarily because no compatible stable upgrade of the complete existing plugin configuration is available. ESLint 9 reached upstream end of life on 2026-08-06: compatibility does not mean ongoing support. Track a maintenance upgrade when all three blocking plugins and the Next configuration support ESLint 10; then verify the complete peer graph and lint behavior without forcing installation.
+
+Installed Next.js 16.4.0 documentation explicitly supports `--webpack` for both `next dev` and `next build`. Scripts consistently select it; `next.config.ts` contains a valid empty `NextConfig`, and Tailwind uses the official PostCSS integration. Keep this configuration. The prior Turbopack production panic reports CSS worker process creation → port binding → `Operation not permitted (os error 1)`, including an elevated retry, while the prior Turbopack development server served successfully. Evidence points to an execution-environment restriction in that production worker path; it does not establish a universal Turbopack defect or prove exclusivity to this environment. Retest in an ordinary macOS terminal when execution permissions or Next/Turbopack versions change, and require successful CSS processing, development serving, and production builds before switching both commands together.
+
+Only this decisions document changes in Task 1B. Dependencies, lockfile, bundler settings, and application source remain unchanged. Local development may proceed with the documented tooling limitations; rerun live audits and reassess reachability before deployment or changes to the dependency graph.
+
 ## Official references
 
 - [Next.js generator](https://nextjs.org/docs/app/api-reference/cli/create-next-app)
@@ -50,3 +77,11 @@ Use compatible stable releases, not canary, beta, preview, or experimental relea
 - [npm ci](https://docs.npmjs.com/cli/v11/commands/npm-ci)
 
 Consult current provider documentation when future integrations are authorized. Listing a provider here does not install it or approve external-service changes.
+
+## Task 2 application shell — 2026-10-12
+
+Use explicit App Router pages with a shared typed presentation catalog, Server Component page patterns, and narrow client boundaries for navigation and browser appearance. Use native mobile disclosure navigation and a labelled system/light/dark selector instead of adding UI libraries. Theme storage contains only a validated browser-local appearance preference. The expected pre-paint theme attribute is the sole reason for root hydration suppression.
+
+The twelve routes and introductory dashboard implement presentation only. All ingestion, AI, X, analytics, account settings, notifications, and private-data workflows remain planned. The private hub route is a placeholder without access control or private information. No dependencies or bundler commands changed; the Task 1B tooling limitations remain applicable.
+
+Task 2 verification: all twelve routes returned HTTP 200, active navigation matched each route, and the thirteen-test built-in Node HTTP suite passed, including unknown-route 404 behavior. Headless Chrome confirmed responsive layouts at 320, 390, 768, 1024, and 1440px without horizontal overflow; mobile menu opening, Escape focus return, and closure after navigation; light/dark/system selection, reload persistence, cross-tab updates, invalid preference handling, blocked-storage fallback, and system appearance without JavaScript. Browser checks reported no console or page errors after adding the SVG application icon. Local server/browser checks required execution outside the tool sandbox because localhost binding/connections and Chrome startup were blocked there; no application workaround or system configuration change was needed. No push or deployment occurred.

@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: Task 1 foundation only. All product capabilities below are planned, not implemented.
+Status: Task 2 visual shell and navigation implemented. All research, content, engagement, and private-data capabilities below remain planned, not implemented.
 Recorded: 2026-10-12.
 
 ## Vision and boundaries

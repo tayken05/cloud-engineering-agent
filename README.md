@@ -1,6 +1,6 @@
 # Cloud Engineering Agent
 
-Cloud Engineering Intelligence and X Content Platform. Task 1 initializes the application foundation and documentation only. The current page is an empty Next.js starter; no dashboard or product integration is implemented.
+Cloud Engineering Intelligence and X Content Platform. Task 2 adds a responsive application shell, an introductory dashboard, twelve navigation routes, and descriptive feature placeholders. No product integrations or live data workflows are implemented.
 
 ## Local development
 
@@ -23,13 +23,15 @@ npm run typecheck
 npm run build
 ```
 
-`npm run start` serves an existing production build locally; it does not deploy the application. Meaningful behavior tests will be added when product behavior is introduced. No test-framework dependency is installed for the empty scaffold.
+`npm run start` serves an existing production build locally; it does not deploy the application. Meaningful behavior tests will be added when product behavior is introduced. No additional test-framework dependency is installed. With the development server running on port 3100, run `npm run test:shell` to check all routes and unknown-route behavior using Node's built-in test runner. Set `SHELL_TEST_URL` for another local port. Responsive navigation and appearance are also checked with browser automation.
 
 Development and production builds use Next.js's supported Webpack mode with Tailwind's official PostCSS integration. This avoids the Turbopack production CSS worker port-binding failure in this execution environment. See `docs/DECISIONS.md` for the recorded reason and known upstream tooling warnings.
 
 ## Project structure
 
-- `src/app/`: App Router layout, empty starter page, and Tailwind CSS.
+- `src/app/`: App Router layout, dashboard, eleven feature placeholders, and Tailwind CSS.
+- `src/components/`: shared shell, navigation, appearance control, and page presentation components.
+- `src/lib/workspace.ts`: typed navigation and descriptive page catalog.
 - `docs/MASTER-BLUEPRINT.md`: all product requirements, independent teaching styles, private hub, and future technology direction.
 - `docs/PROJECT-ROADMAP.md`: current foundation scope and planned later work.
 - `docs/ARCHITECTURE.md`: current structure and planned responsibility boundaries.
@@ -41,6 +43,6 @@ The `@/*` alias maps to `src/*`. The application uses the [official Next.js gene
 
 ## Scope and secrets
 
-Database, authentication, dashboard, AI, X API, scheduled processing, notifications, and deployment are future work. Do not install or configure these based on roadmap entries alone. Keep this project separate from the Football X Agent.
+Database, authentication, live dashboard data, AI, X API, scheduled processing, notifications, and deployment are future work. Do not install or configure these based on roadmap entries alone. Keep this project separate from the Football X Agent.
 
 Environment files, private keys, local credentials, build output, and dependencies are excluded from Git. No secrets or environment files are required for Task 1. Keep future secrets server-side and never place them in `NEXT_PUBLIC_*` variables.
