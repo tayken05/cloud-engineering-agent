@@ -42,9 +42,25 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Verification passed: offline generation/history/no-change regeneration, seven database tests, lint, strict types, production build, and thirteen local production HTTP checks.
 - No Neon provisioning, PostgreSQL driver, live connection, applied migration, information collection, authentication, push, or deployment. Stop for review.
 
-## Planned phase: Database connection and verified intelligence
+## Task 4B.4: Development connection verification — implemented locally
 
-When separately authorized, provision/connect Neon, choose a compatible driver, add credential-bearing migration execution configuration, and validate/apply reviewed SQL on an isolated development database before production. Implement trusted-source validation, canonicalization, conflict-safe upserts, transactional cursor advancement, evidence review/corrections, and durable ingestion with retries, idempotency, timeouts, and controlled concurrency. Schema declarations alone do not implement those behaviors.
+- Installed the stable `@neondatabase/serverless` HTTP driver as a runtime dependency.
+- Validated ignored pooled and direct local connection settings against the expected Neon development endpoint and `neondb` without displaying credentials.
+- Confirmed both connection paths with the same `SELECT`-only probe inside read-only transactions.
+- Kept the application shell disconnected from the database. No migration, schema introspection, data mutation, Vercel variable change, production connection, commit, push, or deployment occurred.
+
+## Task 4B.5: Initial development migration — completed locally
+
+- Revalidated pooled and direct credentials against the user-designated Neon `development` endpoint and `neondb`; used only the direct non-pooler connection for migration execution.
+- Inspected the database before mutation, preserving the managed `neon_auth` schema and confirming that `public` had no conflicting tables, enums, or migration history.
+- Applied the existing `0000_initial_intelligence.sql` through Drizzle's transactional Neon serverless migrator without regenerating it or using `drizzle-kit push`.
+- Verified 4 tables, 6 enums, 58 columns, all primary/unique/check/foreign-key constraints, 17 indexes, defaults, referential actions, and the single matching Drizzle history record against the checked-in snapshot.
+- Passed 13 transaction-scoped integration scenarios and confirmed that rollback left all four tables empty. A second migrator invocation was a catalog/history no-op.
+- No production `main` connection, Vercel variable change, authentication-object change, application query path, commit, push, or deployment was introduced.
+
+## Planned phase: Runtime data access and verified intelligence
+
+When separately authorized, design the server-only application data-access layer and ingestion behavior. Implement trusted-source validation, canonicalization, conflict-safe upserts, transactional cursor advancement, evidence review/corrections, and durable ingestion with retries, idempotency, timeouts, and controlled concurrency. The applied empty development schema does not implement those behaviors or authorize a production migration.
 
 ## Planned phase: Personal Tech Intelligence Hub
 

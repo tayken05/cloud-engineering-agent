@@ -1,6 +1,6 @@
 # Cloud Engineering Agent
 
-Cloud Engineering Intelligence and X Content Platform. Task 2 adds a responsive application shell, an introductory dashboard, twelve navigation routes, and descriptive feature placeholders. Task 4A adds an offline PostgreSQL/Drizzle schema and initial migration; no product integrations or live data workflows are implemented.
+Cloud Engineering Intelligence and X Content Platform. Task 2 adds a responsive application shell, an introductory dashboard, twelve navigation routes, and descriptive feature placeholders. Task 4A adds a PostgreSQL/Drizzle schema and initial migration. Task 4B.4 verifies isolated Neon development connectivity, and Task 4B.5 applies and validates that initial migration on development only. No product data workflow or application query path is implemented.
 
 ## Local development
 
@@ -43,10 +43,10 @@ The `@/*` alias maps to `src/*`. The application uses the [official Next.js gene
 
 ## Scope and secrets
 
-Live database connections, authentication, live dashboard data, AI, X API, scheduled processing, notifications, and deployment are future work. Do not install or configure these based on roadmap entries alone. Keep this project separate from the Football X Agent.
+Application database access, future migrations, production database changes, authentication, live dashboard data, AI, X API, scheduled processing, and notifications are future work. Local Neon development credentials are used only for authorized server-side work and remain outside source control. Do not install or configure roadmap items without authorization. Keep this project separate from the Football X Agent.
 
 Environment files, private keys, local credentials, build output, and dependencies are excluded from Git. No secrets or environment files are required for Task 1. Keep future secrets server-side and never place them in `NEXT_PUBLIC_*` variables.
 
 ## Offline database tooling
 
-`npm run db:generate -- --name=<change-name>` generates reviewed SQL; `npm run db:check` checks migration history; `npm run test:db` runs offline database checks. No connection URL or database driver is required. See [docs/DATABASE.md](docs/DATABASE.md) before future database changes. `.env.example` contains only an empty planned `DATABASE_URL`; preserve existing ignored local environment files. Generation is not migration application, and no production schema synchronization is configured.
+`npm run db:generate -- --name=<change-name>` generates reviewed SQL; `npm run db:check` checks migration history; `npm run test:db` runs offline database checks. These commands do not need a connection URL even though the Neon serverless driver is installed for authorized connectivity and migration work. See [docs/DATABASE.md](docs/DATABASE.md) before database changes. `.env.example` contains empty pooled and direct placeholders; real values belong only in ignored local environment files. Generation is not migration application, and no automatic or production schema synchronization is configured.

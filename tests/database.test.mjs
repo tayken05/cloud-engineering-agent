@@ -10,7 +10,7 @@ import * as schema from "../src/server/db/schema.ts";
 
 const { generateDrizzleJson, generateMigration } = createRequire(import.meta.url)("drizzle-kit/api");
 
-// Offline checks only: no driver, connection, or credentials are used.
+// Offline checks only: no connection or credentials are used.
 test("database modules import without requiring a connection URL", () => {
   assert.equal(getTableConfig(sources).name, "sources");
   assert.throws(() => getDatabaseUrl({}), /DATABASE_URL is required/);

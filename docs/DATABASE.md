@@ -1,14 +1,14 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. **No database exists for this project yet, no connection has been opened, and no migration has been applied.** The application still displays its existing static shell.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.4 verifies pooled and direct read-only access to the isolated Neon development endpoint. Task 4B.5 applies the checked-in initial migration to that development endpoint and validates the live catalog and constraints. **No migration has been applied to production, and the application still has no runtime query path.** The application continues to display its existing static shell.
 
 ## Dependencies and boundaries
 
-Use stable Drizzle ORM 0.45.4 and Drizzle Kit 0.31.11 with Node.js 24 and TypeScript 5.9.3. `server-only` 0.0.1 protects the application-facing entry point. No Neon SDK, PostgreSQL driver, dotenv package, additional ORM, or database test engine is installed.
+Use stable Drizzle ORM 0.45.4, Drizzle Kit 0.31.11, and `@neondatabase/serverless` 1.2.0 with Node.js 24 and TypeScript 5.9.3. `server-only` 0.0.1 protects the application-facing entry point. The Neon driver supports one-shot HTTPS access through Drizzle's `neon-http` adapter and stateful direct sessions through `neon-serverless`; Node.js 24 supplies the WebSocket implementation used by the transactional migrator. No dotenv package, additional WebSocket package, ORM, or database test engine is installed.
 
 - `src/server/db/schema.ts`: pure PostgreSQL declarations, Drizzle relations, and inferred select/insert types. Drizzle Kit reads this file directly; it must not import application code or credentials.
 - `src/server/db/index.ts`: server-only application entry point. Future server code should import from here, never from a Client Component. Do not import the raw schema into client code.
-- `src/server/db/environment.ts`: lazy `DATABASE_URL` reader that checks URL syntax/protocol/host/database without echoing the value. Importing it never reads credentials or initializes a connection. It does not validate connectivity or enforce TLS; those belong to the separately authorized connection task.
+- `src/server/db/environment.ts`: lazy `DATABASE_URL` reader that checks URL syntax/protocol/host/database without echoing the value. Importing it never reads credentials or initializes a connection. Task 4B.4 used a temporary credential-safe probe; no permanent application client was added.
 - `drizzle.config.ts`: credential-free PostgreSQL generation configuration. It deliberately has no `dbCredentials` and does not load actual environment files.
 - `drizzle/`: generated SQL, schema snapshot, and migration journal. These are reviewable source artifacts, not disposable build output.
 
@@ -60,9 +60,9 @@ This task implements identity constraints, not an ingestion engine or canonicali
 
 ## Environment configuration
 
-`DATABASE_URL` is planned server-only configuration. `.env.example` contains only an empty placeholder; no live URL is necessary for generation, tests, type checking, or builds. Actual `.env*` files remain ignored, with a narrow exception for `.env.example`. Never use `NEXT_PUBLIC_DATABASE_URL` or include credentials in configuration files, errors, migration files, or client bundles.
+`DATABASE_URL` is the pooled server-only Neon URL intended for future application queries. `DATABASE_URL_UNPOOLED` is the direct server-only URL reserved for separately authorized migration or session-level work. `.env.example` contains empty placeholders only; no live URL is necessary for generation, offline tests, type checking, or builds. Actual `.env*` files remain ignored, with a narrow exception for `.env.example`. Never use `NEXT_PUBLIC_*` database variables or include credentials in configuration files, errors, migration files, logs, or client bundles.
 
-A previous Vercel CLI link created ignored `.env.local` containing its OIDC credential. This task does not read or replace that file. Do not overwrite it when eventually adding database settings. No Neon project, credentials, or Vercel database environment variables are configured here.
+The local `.env.local` contains both development connection settings and remains ignored and untracked. Task 4B.4 and Task 4B.5 parsed it only inside credential-safe temporary verification code and never displayed either value. The URLs matched the expected development endpoint and `neondb`. Task 4B.5 used only the direct value to execute the migration; it did not fall back to the pooler. Neither value was copied to Vercel, source files, or documentation.
 
 ## Migration workflow
 
@@ -83,13 +83,13 @@ Generated artifacts:
 - `drizzle/meta/0000_snapshot.json`: Drizzle's structural schema snapshot.
 - `drizzle/meta/_journal.json`: the single initial migration entry.
 
-Verification passed: generation and history checks, unchanged-schema regeneration with no new migration, seven offline database tests, ESLint, strict TypeScript, and the production build without a required `DATABASE_URL`. The local production server served all twelve routes successfully, and the thirteen existing HTTP regression checks passed, including unknown-route 404. These are structural/application checks, not PostgreSQL execution tests.
+Task 4A verification passed: generation and history checks, unchanged-schema regeneration with no new migration, seven offline database tests, ESLint, strict TypeScript, and the production build without a required `DATABASE_URL`. The local production server served all twelve routes successfully, and the thirteen existing HTTP regression checks passed, including unknown-route 404. Live PostgreSQL execution and constraint results are recorded in the Task 4B.5 section below.
 
 The initial migration is generated from the schema into `drizzle/`. Review SQL together with the snapshot and journal. Running generation again without schema changes should produce no new migration. `db:check` checks migration history consistency; it does not connect to PostgreSQL, execute SQL, or prove runtime constraint behavior. The automated database tests validate lazy configuration/redacted failures and structural correspondence between declarations and generated artifacts. No test framework dependency is added.
 
-For subsequent changes, edit the schema, generate a descriptively named migration, review SQL and data/backfill/locking implications, and preserve the journal/snapshots with the SQL. Before a later authorized application task, add the appropriate driver and a separate credential-bearing migration execution configuration, validate against an isolated PostgreSQL/Neon development database, then apply reviewed migrations explicitly. Rehearse recovery and backups before production changes. Do not edit applied migrations or use `drizzle-kit push` for production synchronization.
+For subsequent changes, edit the schema, generate a descriptively named migration, review SQL and data/backfill/locking implications, and preserve the journal/snapshots with the SQL. Apply only reviewed migrations through an explicitly authorized, credential-safe runner over a direct connection, validate them first on the isolated Neon development branch, and record the result. Rehearse recovery and backups before any separately authorized production change. Do not edit applied migrations or use `drizzle-kit push` for synchronization.
 
-There is intentionally no `db:migrate`, `db:push`, startup migration, live schema introspection, or automatic build/deployment migration. Nothing in this document authorizes provisioning or applying a migration.
+There is intentionally no committed `db:migrate`, `db:push`, startup migration, live application introspection, or automatic build/deployment migration. Task 4B.5 authorized only the recorded initial development-branch application. Future development or production changes require separate authorization; builds and application startup must never apply migrations implicitly.
 
 ## Deferred expansion and review decisions
 
@@ -109,6 +109,8 @@ npm reported deprecated esbuild-kit loader packages and blocked three esbuild po
 - [Drizzle indexes and constraints](https://orm.drizzle.team/docs/indexes-constraints)
 - [Drizzle generation](https://orm.drizzle.team/docs/drizzle-kit-generate)
 - [Drizzle configuration](https://orm.drizzle.team/docs/drizzle-config-file)
+- [Drizzle Neon connections](https://orm.drizzle.team/docs/connect-neon)
+- [Neon serverless driver](https://github.com/neondatabase/serverless)
 - [PostgreSQL constraints and NULL semantics](https://www.postgresql.org/docs/current/ddl-constraints.html)
 
 ## Resumed completion audit — 2026-10-13
@@ -116,3 +118,23 @@ npm reported deprecated esbuild-kit loader packages and blocked three esbuild po
 Recovered the existing four-table schema, configuration, generated SQL/snapshot/journal, environment guard, dependencies, and tests without rebuilding them. The entire existing SQL now has a regression check against Drizzle's freshly generated initial DDL in memory. Seven database tests and thirteen local production route tests passed; offline regeneration created no additional migration, migration-history checking passed, and the existing SQL was not edited. Lint, strict type checking, and the Webpack production build passed without `DATABASE_URL`; the existing local environment file has no database URL entry. No driver, database connection, Neon resource, migration execution, commit, push, or deployment was introduced.
 
 Fresh audits reconfirmed zero production findings and nine development package findings across the two documented advisories. Pre-existing lockfile package records remain semantically identical to HEAD. Git's histogram diff shows only the new dependency records and root manifest changes; large default diff output is repeated JSON matching noise, not unrelated upgrades. Review this local foundation before authorizing connection or ingestion work.
+
+## Development connection verification — 2026-10-13
+
+Task 4B.4 installed exact stable `@neondatabase/serverless` 1.2.0. Both local connection strings passed structural checks for PostgreSQL URL syntax, credentials, Neon host form, the expected endpoint identifier, the same host domain, and database name. The pooled host used `-pooler`; the direct host did not.
+
+The same fixed query selected `current_database()`, `current_setting('server_version')`, and the integer `1` through each connection. Each execution used the driver's HTTP transaction API with `readOnly: true` and a 20-second cancellation signal. Both returned `neondb`, probe value `1`, and PostgreSQL 18.6. Fixed error messages intentionally withheld provider diagnostics that could contain sensitive connection details.
+
+This verification executed only `SELECT` statements. It did not inspect schema objects, run the generated migration, use Drizzle Kit against Neon, or create/update/delete data. Temporary probe files remained outside the repository and were removed after verification. The application's database modules remain lazy and build-safe without environment variables.
+
+## Development migration application — 2026-10-13
+
+Task 4B.5 revalidated both local URLs and used the project owner's current Neon dashboard mapping of endpoint `ep-sweet-bread-b72xtg4u` to the `development` branch. Both URLs named `neondb`; the pooled host used the endpoint's `-pooler` form and the direct host used the exact non-pooler endpoint. Read-only probes succeeded on PostgreSQL 18.6 before any schema change. Preflight catalog inspection found only the provider-managed `neon_auth` schema plus an empty `public` schema, no planned-name conflicts, and no existing Drizzle history. The migration did not query or alter `neon_auth`.
+
+The checked-in `drizzle/0000_initial_intelligence.sql` was byte-verified with SHA-256 `6e8821987f394954f59837b525345c03040b68f19ff339ba4810557d1a3f4a0e`, then applied over `DATABASE_URL_UNPOOLED` with `drizzle-orm/neon-serverless/migrator`. This supported path used one direct WebSocket pool connection and the PostgreSQL transactional migrator. It did not use `drizzle-kit push`, regenerate SQL, synchronize arbitrary schema state, read Vercel variables, or access the pooled URL as a migration fallback.
+
+Read-only catalog comparison against `drizzle/meta/0000_snapshot.json` verified all 4 tables and 58 columns, all 6 enums and their ordered values, 4 primary keys, 5 unique constraints, 3 validated foreign keys with `ON DELETE RESTRICT` / `ON UPDATE NO ACTION`, 16 validated checks, 8 explicit indexes, and 9 primary/unique backing indexes. Column types, nullability, defaults, timestamp defaults, UUID defaults, index columns, and row-level-security state matched the snapshot. `drizzle.__drizzle_migrations` contains one row with the checked-in migration's checksum and journal timestamp.
+
+Thirteen controlled integration scenarios passed inside an outer transaction: valid/defaulted source and item records; source-key uniqueness; reliability bounds; source-item external-ID and canonical-URL deduplication; foreign-key rejection; required details for verified stories; a valid verified story; one story linked to evidence from two different sources; duplicate evidence-link rejection; and restrictive deletion. The transaction was rolled back, and a separate read-only residue check found zero test records in all four tables.
+
+A second invocation of the same Drizzle migrator completed without adding a history row or changing the catalog. The full catalog fingerprint remained `51e385431339b45e706ade37fd9382ffff945435a455345e6d78b70f848b57e7`, the migration-history row count remained one, and every application table remained empty. Production `main`, Vercel environment variables, authentication objects, application source, and deployment state were not accessed or modified.

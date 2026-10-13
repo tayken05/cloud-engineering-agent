@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: visual shell deployed; Task 4A offline intelligence schema/migrations implemented locally. All research, content, engagement, and private-data capabilities below remain planned, not implemented.
+Status: visual shell deployed; Task 4A intelligence schema/migrations implemented; Task 4B.4 isolated Neon development connectivity verified; Task 4B.5 initial migration applied and validated on development only. The application still has no database query path, and all research, content, engagement, and private-data capabilities below remain planned.
 Recorded: 2026-10-12.
 
 ## Vision and boundaries
@@ -94,14 +94,14 @@ The publishing direction is human-reviewed and manual. Draft generation or reply
 
 ## Technology direction
 
-Implemented foundation: Node.js 24 LTS, npm and its lockfile, Next.js 16 App Router, React, strict TypeScript, Tailwind CSS, ESLint, `src/`, and the `@/*` alias. Drizzle ORM/Kit now define offline PostgreSQL schema and migrations; no live database connection exists.
+Implemented foundation: Node.js 24 LTS, npm and its lockfile, Next.js 16 App Router, React, strict TypeScript, Tailwind CSS, ESLint, `src/`, and the `@/*` alias. Drizzle ORM/Kit define the PostgreSQL schema and reviewed migration. The Neon serverless driver is installed; pooled/direct development connectivity is verified, and the initial migration is applied and structurally validated only on development. Application data access and any production migration remain planned.
 
 Integration direction and current status:
 
 | Technology | Intended future role |
 | --- | --- |
-| Neon PostgreSQL | Persistent application data |
-| Drizzle ORM | Offline schema/migration foundation implemented; runtime access remains planned |
+| Neon PostgreSQL | Initial empty schema applied to isolated development; application persistence behavior and production configuration remain planned |
+| Drizzle ORM | Schema/migration foundation and initial development migration implemented; runtime queries and future migrations remain separately gated |
 | OpenAI API | Research assistance, draft generation, and reply suggestions |
 | Vercel | Shell hosting implemented in Task 3B; future releases require task authorization |
 | Official X API where feasible | Approved tracking and engagement capabilities |

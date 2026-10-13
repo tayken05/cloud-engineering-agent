@@ -19,6 +19,7 @@
     "test:db": "node --conditions=react-server --test tests/database.test.mjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "1.2.0",
     "drizzle-orm": "0.45.4",
     "next": "16.4.0",
     "react": "19.3.0",
