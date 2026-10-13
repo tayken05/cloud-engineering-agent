@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: Task 2 visual shell and navigation implemented. All research, content, engagement, and private-data capabilities below remain planned, not implemented.
+Status: visual shell deployed; Task 4A offline intelligence schema/migrations implemented locally. All research, content, engagement, and private-data capabilities below remain planned, not implemented.
 Recorded: 2026-10-12.
 
 ## Vision and boundaries
@@ -94,16 +94,16 @@ The publishing direction is human-reviewed and manual. Draft generation or reply
 
 ## Technology direction
 
-Implemented foundation: Node.js 24 LTS, npm and its lockfile, Next.js 16 App Router, React, strict TypeScript, Tailwind CSS, ESLint, `src/`, and the `@/*` alias.
+Implemented foundation: Node.js 24 LTS, npm and its lockfile, Next.js 16 App Router, React, strict TypeScript, Tailwind CSS, ESLint, `src/`, and the `@/*` alias. Drizzle ORM/Kit now define offline PostgreSQL schema and migrations; no live database connection exists.
 
-Planned only; do not install or provision in Task 1:
+Integration direction and current status:
 
 | Technology | Intended future role |
 | --- | --- |
 | Neon PostgreSQL | Persistent application data |
-| Drizzle ORM | Typed database access and migrations |
+| Drizzle ORM | Offline schema/migration foundation implemented; runtime access remains planned |
 | OpenAI API | Research assistance, draft generation, and reply suggestions |
-| Vercel | Application hosting, subject to explicit deployment approval |
+| Vercel | Shell hosting implemented in Task 3B; future releases require task authorization |
 | Official X API where feasible | Approved tracking and engagement capabilities |
 | Scheduled and durable background processing | Ingestion, digests, retries, and other asynchronous work |
 | Telegram Bot API | Approved private notifications and later community workflows |

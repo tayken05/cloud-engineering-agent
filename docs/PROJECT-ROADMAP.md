@@ -34,9 +34,17 @@ Production verification passed: READY Git-sourced build, all twelve routes retur
 
 Specify access control and privacy boundaries for the Personal Tech Intelligence Hub before storing or exposing private information. Authentication and functional dashboard data remain future tasks.
 
-## Planned phase: Persistence and verified intelligence
+## Task 4A: Offline database foundation — implemented locally
 
-Evaluate Neon PostgreSQL and Drizzle ORM. Design trusted sources, evidence, original links, publication/retrieval/verification timestamps, verification status, duplicate detection, and corrections. Plan durable ingestion with retries, idempotency, timeouts, and controlled concurrency. Do not provision services until authorized.
+- Stable Drizzle PostgreSQL schemas for sources, collected items, stories, and evidence relationships; real keys, constraints, and targeted indexes.
+- Original/canonical attribution, publication/collection/verification times, review metadata, content-hash candidates, and ingestion/retry fields.
+- Credential-free Drizzle generation/check configuration, initial SQL migration with snapshot/journal, server-only entry point, lazy environment validation, empty `.env.example`, and offline regression checks.
+- Verification passed: offline generation/history/no-change regeneration, seven database tests, lint, strict types, production build, and thirteen local production HTTP checks.
+- No Neon provisioning, PostgreSQL driver, live connection, applied migration, information collection, authentication, push, or deployment. Stop for review.
+
+## Planned phase: Database connection and verified intelligence
+
+When separately authorized, provision/connect Neon, choose a compatible driver, add credential-bearing migration execution configuration, and validate/apply reviewed SQL on an isolated development database before production. Implement trusted-source validation, canonicalization, conflict-safe upserts, transactional cursor advancement, evidence review/corrections, and durable ingestion with retries, idempotency, timeouts, and controlled concurrency. Schema declarations alone do not implement those behaviors.
 
 ## Planned phase: Personal Tech Intelligence Hub
 

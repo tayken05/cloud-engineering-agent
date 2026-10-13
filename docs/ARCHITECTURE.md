@@ -1,6 +1,6 @@
 # Architecture
 
-Status: application shell implemented and deployed to Vercel; product workflows remain planned. Product domains and integrations described as planned below are not implemented.
+Status: application shell deployed; Task 4A database schema/migrations exist locally without a database connection. Product workflows remain planned. Product domains and integrations described as planned below are not implemented.
 
 ## Current application
 
@@ -11,7 +11,7 @@ Status: application shell implemented and deployed to Vercel; product workflows 
 - `@/*` resolves to `src/*`.
 - Root configuration contains Next.js, TypeScript, and ESLint settings.
 - `docs/` contains product requirements, roadmap, architecture, and decisions. Root `AGENTS.md` governs coding-agent work.
-- The dashboard is a static introduction to the four pillars. Eleven other routes provide descriptive empty states; no research, content, engagement, or private-data workflows are implemented. API integrations, authentication, databases, and jobs remain planned.
+- The dashboard is a static introduction to the four pillars. Eleven other routes provide descriptive empty states; no research, content, engagement, or private-data workflows are implemented. API integrations, authentication, live database access, and jobs remain planned.
 
 ## Implemented application shell
 
@@ -34,6 +34,16 @@ Status: application shell implemented and deployed to Vercel; product workflows 
 - The canonical production domain is public. Team, branch, and immutable deployment aliases may require Vercel Authentication; keep deployment protection intact and use authorized Vercel tooling when necessary.
 - No paid plan, add-on, database, AI service, or application authentication was added. The public hub remains an empty placeholder, without private information.
 - Git-based documentation/configuration updates must be committed and pushed normally, then verified against the resulting production commit. No force-push or history rewrite.
+
+## Local database foundation — Task 4A
+
+Drizzle ORM 0.45.4, Drizzle Kit 0.31.11, and `server-only` 0.0.1 define a PostgreSQL/Neon-compatible model in `src/server/db/`. Four tables cover sources, collected source items, stories, and many-to-many story evidence. Actual foreign keys/unique/check constraints accompany typed Drizzle relationships. UUIDs, timezone-aware provenance timestamps, optional primary topics, operational/retry fields, and verification details prepare the intelligence model without implementing ingestion.
+
+`src/server/db/index.ts` is the server-only entry point. The raw schema remains pure for migration tooling, and the lazy environment reader validates a planned `DATABASE_URL` only when called. No driver, connection factory, module-initialization connection, ORM queries, Neon project, or application database variables exist. The UI imports none of this database code.
+
+`drizzle.config.ts` deliberately omits credentials. `db:generate` and `db:check` run offline; generated SQL, snapshot, and journal live in `drizzle/`. `.env.example` contains an empty `DATABASE_URL`, with only that example exempted from environment-file exclusions. No migration runs during startup, builds, or Vercel deployment, and no schema synchronization is configured.
+
+See `docs/DATABASE.md` for the model, deduplication/verification limits, indexes, retention decisions, and future authorized migration workflow. The initial SQL has been generated and structurally checked, not executed against PostgreSQL or Neon. Task 4A changes are local and have not been pushed or deployed.
 
 ## Planned module boundaries
 
@@ -77,7 +87,7 @@ These flows are proposals; no ingestion, AI generation, publishing, engagement, 
 
 ## Planned technology choices
 
-Neon PostgreSQL and Drizzle ORM are the persistence direction. OpenAI API is the AI direction. Vercel is the hosting direction. Official X API access is conditional on feasibility. Scheduled and durable processing, Telegram Bot API, and Browser Push API are future integration directions. None is installed, configured, or provisioned during Task 1.
+Neon PostgreSQL remains the planned live persistence provider; Drizzle schema and migration declarations are implemented locally. OpenAI API is the AI direction. Vercel is the hosting direction. Official X API access is conditional on feasibility. Scheduled and durable processing, Telegram Bot API, and Browser Push API are future integration directions. None is installed, configured, or provisioned during Task 1.
 
 ## Security and project separation
 
