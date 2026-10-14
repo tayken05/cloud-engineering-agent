@@ -1,6 +1,6 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.4 verifies pooled and direct read-only access to the isolated Neon development endpoint. Task 4B.5 applies the checked-in initial migration to development, and Task 4B.10 applies the identical checksum-locked migration to production after guarded preflight. **The application still has no runtime query path.** The application continues to display its existing static shell.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the same checksum-locked migration to development and production. Task 5 adds one bounded runtime query path: the public Sources Catalog reads approved metadata from `sources`. No other table has an application query path, and no ingestion or public write interface exists.
 
 ## Dependencies and boundaries
 
@@ -8,7 +8,8 @@ Use stable Drizzle ORM 0.45.4, Drizzle Kit 0.31.11, and `@neondatabase/serverles
 
 - `src/server/db/schema.ts`: pure PostgreSQL declarations, Drizzle relations, and inferred select/insert types. Drizzle Kit reads this file directly; it must not import application code or credentials.
 - `src/server/db/index.ts`: server-only application entry point. Future server code should import from here, never from a Client Component. Do not import the raw schema into client code.
-- `src/server/db/environment.ts`: lazy `DATABASE_URL` reader that checks URL syntax/protocol/host/database without echoing the value. Importing it never reads credentials or initializes a connection. Task 4B.4 used a temporary credential-safe probe; no permanent application client was added.
+- `src/server/db/environment.ts`: lazy `DATABASE_URL` reader that checks URL syntax/protocol/host/database without echoing the value. Importing it never reads credentials or initializes a connection.
+- `src/server/db/client.ts`: lazy application client factory using Drizzle's Neon HTTP adapter. It reads the pooled `DATABASE_URL` only when a server request invokes a query and applies an eight-second abort signal. It does not connect at module load or during builds.
 - `drizzle.config.ts`: credential-free PostgreSQL generation configuration. It deliberately has no `dbCredentials` and does not load actual environment files.
 - `drizzle/`: generated SQL, schema snapshot, and migration journal. These are reviewable source artifacts, not disposable build output.
 
@@ -58,11 +59,19 @@ This task implements identity constraints, not an ingestion engine or canonicali
 5. Link evidence idempotently using the composite key. Preserve separate source attribution across publishers; content hashes and canonical URLs can flag possible syndication, not establish independence or verification.
 6. Future workers need bounded retries/backoff, idempotent writes, controlled concurrency, timeouts/cancellation, atomic cursor advancement, and sanitized errors without credentials or response bodies. Changing evidence content must trigger a verification review; versioned snapshots are not implemented yet.
 
+## Technology Sources Catalog — Task 5
+
+The first runtime feature reads only `key`, `name`, `canonical_url`, `kind`, `primary_topic`, `description`, and `is_active` from `sources`. `src/server/sources/list-sources.ts` applies validated text/topic/type/status filters, parameterized Drizzle conditions, deterministic ordering, and a 100-row maximum. Provider failures become a fixed safe application error. The page calls Next.js `connection()` before the query, so the database is reached only for a real request. Results are intentionally uncached in this first version; each request reads current catalog state. Revisit short revalidation only after authenticated administration creates a reliable invalidation policy.
+
+Eleven first-party sources are registered in both Neon `development` and production `main`: AWS Architecture Blog, Microsoft Azure Blog, Google Cloud Blog, Linux Kernel Archives, Cloudflare Blog, Kubernetes Blog, Cloud Native Computing Foundation Blog, HashiCorp Blog, NIST Cybersecurity Insights, GitHub Engineering, and NVIDIA Technical Blog. Only verified public website URLs are stored. The schema has no feed URL field, so this task does not invent or overload RSS/Atom endpoints. Reliability, collection timestamps, cursors, and ingestion statistics remain unset.
+
+`scripts/source-catalog-seed.mjs` is operator-only tooling, not an application endpoint or build hook. Development requires the exact direct development endpoint from ignored `.env.local`. Production reuses the dedicated ignored `0600` production migration credential, exact direct production endpoint allowlist, and a source-specific interactive confirmation. Both modes verify the applied migration and catalog conflicts before writes. Registration is insert-only with `ON CONFLICT DO NOTHING`; exact repeats insert zero rows, while conflicting keys or canonical URLs stop the transaction. The script fingerprints `neon_auth` and verifies non-source application table counts around writes. It never migrates schemas, exposes credentials, or creates public write APIs.
+
 ## Environment configuration
 
 `DATABASE_URL` is the pooled server-only Neon URL intended for future application queries. `DATABASE_URL_UNPOOLED` is the direct server-only URL reserved for separately authorized migration or session-level work. `.env.example` contains empty placeholders only; no live URL is necessary for generation, offline tests, type checking, or builds. Actual `.env*` files remain ignored, with a narrow exception for `.env.example`. Never use `NEXT_PUBLIC_*` database variables or include credentials in configuration files, errors, migration files, logs, or client bundles.
 
-The local `.env.local` contains both development connection settings and remains ignored and untracked. Task 4B.4 and Task 4B.5 parsed it only inside credential-safe temporary verification code and never displayed either value. The URLs matched the expected development endpoint and `neondb`. Task 4B.5 used only the direct value to execute the migration; it did not fall back to the pooler. Neither value was copied to Vercel, source files, or documentation.
+The local `.env.local` contains both development connection settings and remains ignored and untracked. The URLs match the expected development endpoint and `neondb`. Task 5 uses pooled `DATABASE_URL` for local application reads and the direct value only in guarded administrative source registration. Neither value is copied to source files or documentation.
 
 ## Migration workflow
 

@@ -84,8 +84,8 @@ export const sections = [
     title: "Sources",
     group: "Manage",
     description: "Establish the trusted foundations of your research.",
-    empty: "No sources connected yet",
-    detail: "A curated source registry, original links, verification, and freshness indicators are planned. No ingestion or background processing is active."
+    empty: "Trusted technology source catalog",
+    detail: "The catalog lists registered first-party sources and their official links. Automated ingestion, freshness tracking, and source administration are not active."
   },
   {
     href: "/settings",

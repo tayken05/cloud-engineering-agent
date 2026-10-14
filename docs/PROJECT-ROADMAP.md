@@ -72,9 +72,17 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Verified 4 empty application tables, 58 columns, 6 enums, all expected keys/checks/foreign keys, 17 indexes, and one matching migration-history row. The managed-auth catalog fingerprint remained unchanged, and repeat migration evaluation skips the applied entry.
 - Runtime database access, ingestion, application authentication, and data population remain future work. Normal application builds and Vercel deployments do not run migrations.
 
-## Planned phase: Runtime data access and verified intelligence
+## Task 5: Technology Sources Catalog — implemented
 
-When separately authorized, design the server-only application data-access layer and ingestion behavior. Implement trusted-source validation, canonicalization, conflict-safe upserts, transactional cursor advancement, evidence review/corrections, and durable ingestion with retries, idempotency, timeouts, and controlled concurrency. The applied empty development schema does not implement those behaviors or authorize a production migration.
+- Added the first server-only runtime database query using Drizzle and Neon HTTP, with lazy configuration, an eight-second timeout, a 100-row limit, safe errors, and request-time uncached rendering.
+- Replaced the Sources placeholder with a responsive catalog, accessible search and topic/type/status filters, official links, enabled state, honest empty/error states, and a clear verification limitation.
+- Registered 11 reviewed first-party technology sources in development and production through guarded direct-connection tooling. A repeated development execution inserted zero rows; production postflight found all 11 exact records and zero pending inserts.
+- Kept writes out of the public application. No API route, Server Action, schema migration, ingestion job, source reliability score, freshness metric, article, or authentication behavior was added.
+- Verification covers catalog identities/category scope, filter validation, wrong-endpoint guards, conflict detection, idempotent planning, development and production pre/postflight, HTTP filters/empty state, safe database-failure rendering, route regressions, lint, strict types, production build, database tests, and dependency audits.
+
+## Planned phase: Expanded verified intelligence
+
+When separately authorized, expand the narrow Sources read path into ingestion behavior. Implement item canonicalization, conflict-safe upserts, transactional cursor advancement, evidence review/corrections, and durable ingestion with retries, idempotency, timeouts, and controlled concurrency. The populated source registry does not collect articles or verify future publisher claims.
 
 ## Planned phase: Personal Tech Intelligence Hub
 
