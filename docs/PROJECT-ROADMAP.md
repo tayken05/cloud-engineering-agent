@@ -95,7 +95,7 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Added `collection_runs` through the reviewed `0001_collection_runs.sql` migration on development and production. It records run state, timing, source outcomes, item counts, safe failure codes, and a 240-second recoverable database lease.
 - Reused the six-feed Task 6 pipeline with concurrency two, existing network/content bounds, one bounded retry for failed sources, transactional idempotent writes, and per-source failure isolation.
 - Added the latest fully successful collection timestamp to Stories & News without exposing operational errors. Development verified genuine fetching, repeat idempotency, concurrent skip behavior, expired-lease recovery, and partial failure records.
-- Scheduling activation, an authenticated production test, GitHub synchronization, and live deployment verification are part of the Task 7 rollout. The first platform-scheduled invocation remains pending until its configured UTC window occurs.
+- Production rollout registered the Cron on the intended Git-sourced deployment. The controlled authenticated run processed six publishers, inserted one new item, recognized 109 existing items, released its lease, and left zero duplicate identity groups; an unauthenticated request returned 401 with no run record. The first platform-scheduled invocation remains pending until the next 06:00–06:59 UTC Hobby execution window.
 
 ## Planned phase: Expanded verified intelligence
 
