@@ -9,6 +9,10 @@ type NavigationProps = { label: string; onNavigate?: () => void };
 export function Navigation({ label, onNavigate }: NavigationProps) {
   const pathname = usePathname();
 
+  function isCurrent(href: string) {
+    return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+  }
+
   return (
     <nav aria-label={label} className="navigation">
       {navigationGroups.map((group) => (
@@ -19,7 +23,7 @@ export function Navigation({ label, onNavigate }: NavigationProps) {
               <li key={section.href}>
                 <Link
                   href={section.href}
-                  aria-current={pathname === section.href ? "page" : undefined}
+                  aria-current={isCurrent(section.href) ? "page" : undefined}
                   onClick={onNavigate}
                   className="nav-link"
                 >

@@ -3,6 +3,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://cloud-engineering-agent.vercel.app"),
   title: "Cloud Engineering Agent",
   description: "Cloud Engineering Intelligence and X Content Platform",
 };

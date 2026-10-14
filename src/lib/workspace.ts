@@ -32,6 +32,14 @@ export const sections = [
     detail: "Publisher updates include original links, publication and collection timestamps, and source-scoped duplicate detection. Independently verified story grouping remains planned."
   },
   {
+    href: "/jobs",
+    title: "Jobs & Opportunities",
+    group: "Intelligence",
+    description: "Find genuine cloud and infrastructure roles through official employer sources.",
+    empty: "Verified technical opportunities",
+    detail: "Search verified employer listings by discipline, location, work arrangement, experience, and employment type. Applications always continue on the employer's official website."
+  },
+  {
     href: "/ideas",
     title: "Content Ideas",
     group: "Create",

@@ -10,7 +10,9 @@ export function Header() {
   const pathname = usePathname();
   const menu = useRef<HTMLDetailsElement>(null);
   const summary = useRef<HTMLElement>(null);
-  const title = sections.find((section) => section.href === pathname)?.title ?? "Page not found";
+  const title = sections.find((section) => (
+    section.href === pathname || (section.href !== "/" && pathname.startsWith(`${section.href}/`))
+  ))?.title ?? "Page not found";
 
   function closeMenu() {
     if (menu.current) menu.current.open = false;

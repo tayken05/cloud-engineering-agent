@@ -1,7 +1,7 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: visual shell deployed; the intelligence schema, 12-source catalog, and collected publisher metadata exist in Neon development and production. Task 8 expands the protected daily collector to 12 verified feeds across cloud, networking, Linux, DevOps, cybersecurity, software engineering, and AI infrastructure while retaining durable monitoring, bounded retry, lease-based concurrency control, and factual freshness. Verified story processing, content, engagement, and private-data capabilities below remain planned.
-Recorded: 2026-10-12.
+Status: the deployed platform includes the intelligence schema, 12-source daily news collector, and a public database-backed Jobs & Opportunities Hub. Task 9 adds 11 live-verified vacancies from four official employer boards, bounded discovery and detail pages, and guarded operator-only import tooling. Automated job discovery, applications, accounts, verified-talent workflows, AI, and X capabilities remain planned.
+Recorded: 2026-10-14.
 
 ## Vision and boundaries
 
@@ -78,7 +78,7 @@ Planned information requirements:
 
 ## Planned product capabilities
 
-None of the following is implemented yet:
+The Jobs & Opportunities Hub now presents verified official listings and directs applicants to employer websites. The following capabilities remain planned:
 
 - Content research and opportunities.
 - AI-generated drafts.
@@ -89,6 +89,8 @@ None of the following is implemented yet:
 - Browser and Telegram notifications.
 - Content memory and analytics.
 - Future Telegram and Discord engineering communities.
+- Employer and candidate accounts, applications, messaging, and payments.
+- Human-reviewed professional and employer verification, GitHub/project-portfolio evidence, contractor matching, and candidate discovery.
 
 The publishing direction is human-reviewed and manual. Draft generation or reply suggestions must not trigger autonomous public posting. Future X API access must be evaluated against official capabilities, permissions, availability, and current terms before implementation.
 

@@ -10,7 +10,16 @@ import {
 } from "../scripts/migration-history-guard.mjs";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { getDatabaseUrl } from "../src/server/db/environment.ts";
-import { collectionRuns, sources, sourceItems, stories, storySourceItems } from "../src/server/db/schema.ts";
+import {
+  collectionRuns,
+  jobEmployers,
+  jobs,
+  jobSources,
+  sources,
+  sourceItems,
+  stories,
+  storySourceItems,
+} from "../src/server/db/schema.ts";
 import * as schema from "../src/server/db/schema.ts";
 
 const { generateDrizzleJson, generateMigration } = createRequire(import.meta.url)("drizzle-kit/api");
@@ -100,6 +109,7 @@ test("migration history contains only reviewed additive schema entries", async (
   assert.deepEqual(journal.entries.map((entry) => entry.tag), [
     "0000_initial_intelligence",
     "0001_collection_runs",
+    "0002_jobs_opportunities",
   ]);
   for (const entry of journal.entries) {
     const migration = await readFile(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8");
@@ -128,7 +138,8 @@ test("operator tooling accepts only the exact applied migration history", () => 
 test("the collection-run migration matches fresh offline generation from the initial snapshot", async () => {
   // Generate in memory only: no files, credentials, connections, or schema execution.
   const initialSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0000_snapshot.json", import.meta.url), "utf8"));
-  const generated = await generateMigration(initialSnapshot, generateDrizzleJson(schema));
+  const monitoringSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0001_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(initialSnapshot, monitoringSnapshot);
   const migration = await readFile(new URL("../drizzle/0001_collection_runs.sql", import.meta.url), "utf8");
   const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   assert.deepEqual(existing, generated.map((statement) => statement.trim()));
@@ -142,4 +153,28 @@ test("the monitoring table snapshot matches the declared schema", async () => {
   assert.deepEqual(Object.keys(stored.columns).sort(), declared.columns.map((column) => column.name).sort());
   assert.deepEqual(Object.keys(stored.indexes).sort(), declared.indexes.map((index) => index.config.name).sort());
   assert.deepEqual(Object.keys(stored.checkConstraints).sort(), declared.checks.map((check) => check.name).sort());
+});
+
+test("the jobs migration matches fresh offline generation from the monitoring snapshot", async () => {
+  const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0001_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const migration = await readFile(new URL("../drizzle/0002_jobs_opportunities.sql", import.meta.url), "utf8");
+  const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
+  assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the jobs snapshot matches all declared tables and restrictive foreign keys", async () => {
+  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0002_snapshot.json", import.meta.url), "utf8"));
+  for (const table of [jobEmployers, jobSources, jobs]) {
+    const declared = getTableConfig(table);
+    const stored = snapshot.tables[`public.${declared.name}`];
+    assert.ok(stored, `Missing jobs migration table: ${declared.name}`);
+    assert.deepEqual(Object.keys(stored.columns).sort(), declared.columns.map((column) => column.name).sort());
+    assert.deepEqual(Object.keys(stored.uniqueConstraints).sort(), declared.uniqueConstraints.map((constraint) => constraint.getName()).sort());
+    assert.deepEqual(Object.keys(stored.indexes).sort(), declared.indexes.map((index) => index.config.name).sort());
+    assert.deepEqual(Object.keys(stored.checkConstraints).sort(), declared.checks.map((check) => check.name).sort());
+    for (const foreignKey of declared.foreignKeys) {
+      assert.equal(stored.foreignKeys[foreignKey.getName()].onDelete, "restrict");
+    }
+  }
 });

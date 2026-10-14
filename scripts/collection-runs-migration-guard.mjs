@@ -19,8 +19,8 @@ export function validateCollectionRunsMigration(sql, journal) {
   if (checksum !== collectionRunsMigrationConfig.migrationSha256) {
     stop("The collection-run migration checksum differs from the reviewed artifact.");
   }
-  if (journal?.dialect !== "postgresql" || journal.entries?.length !== 2) {
-    stop("The Drizzle journal must contain exactly the two reviewed migrations.");
+  if (journal?.dialect !== "postgresql" || journal.entries?.length < 2) {
+    stop("The Drizzle journal must contain the two reviewed migration entries.");
   }
   const [initial, collectionRuns] = journal.entries;
   if (

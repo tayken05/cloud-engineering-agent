@@ -105,6 +105,22 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Kept concurrency two, the 15-second fetch timeout, one bounded retry, exact host controls, the single daily Cron, PostgreSQL lease, and durable run records. The catalog ceiling is 210 items and the theoretical two-pass network window is 180.75 seconds within the 225-second route budget.
 - Development processed all 12 feeds and 182 live entries. The initial expansion added 75 genuine records; a stable-window repeat added zero and retained zero duplicate identity groups. The guarded production run processed all 12 feeds, inserted 74 new records, recognized 108 unchanged identities, and left production at 185 items with zero duplicates, zero active leases, and nine unchanged Neon Auth tables.
 
+## Task 9: Cloud Careers & Opportunities Hub — implemented
+
+- Added `job_employers`, `job_sources`, and `jobs` with a forward-only Drizzle migration, stable provider identities, nullable factual fields, verification metadata, restrictive relationships, uniqueness checks, and bounded-query indexes.
+- Added a responsive `/jobs` explorer with shareable search and employer, specialization, category, country, workplace, experience, employment, salary, and status filters. Results are newest-first and limited to 12 per page.
+- Added stable `/jobs/[slug]` pages with canonical metadata, factual source and verification dates, clear vacancy state, and official external application links. The sitemap includes open listings; JobPosting markup remains disabled unless a record meets the documented completeness gate.
+- Registered 11 live-verified vacancies from Canonical, Moniepoint, Supabase, and Veeva through guarded, idempotent administrative tooling. Development repeatability inserted zero duplicates; production retained the same reviewed catalog. Existing news data, daily Cron, and all nine Neon Auth tables were preserved.
+- Kept employer/candidate accounts, job submissions, applications, CV collection, messaging, payments, recurring discovery, talent verification, contractor matching, and candidate search outside the public unauthenticated application.
+
+## Task 10: Recurring job discovery — planned
+
+Design bounded, source-compliant refresh and closure detection for approved employer boards. Recheck vacancy status and eligibility, record failures and last verification, prevent concurrent duplicate imports, and preserve the existing news Cron without creating an unreviewed public trigger.
+
+## Task 11: Verified talent marketplace — planned
+
+Design authentication and authorization before storing private profiles. Future scope may include employer and candidate registration, human-reviewed identity and professional verification, GitHub and project-portfolio evidence, employer verification, contractor/freelance matching, applications, and candidate discovery. Privacy, consent, retention, moderation, and abuse controls must precede implementation.
+
 ## Planned phase: Verified story intelligence
 
 When separately authorized, design deterministic story grouping and evidence review/corrections without treating publisher provenance as independent verification. Review source cursor policies and richer private operational observability only when actual run history demonstrates a need. The collector stores bounded publisher metadata only.
@@ -125,9 +141,9 @@ Support manual X publishing after human review and published post tracking. Eval
 
 Design conversation hubs, a Shared Inbox, and AI reply suggestions. Define access boundaries, source attribution, deduplication, rate limits, and human review requirements before integration work.
 
-## Planned phase: Notifications, jobs, and analytics
+## Planned phase: Notifications and analytics
 
-Evaluate scheduled and durable background processing, Telegram Bot API, and Browser Push API. Add opt-in browser and Telegram notifications, delivery preferences, analytics, and approved measurement definitions. Design jobs with retries, idempotency, controlled concurrency, cancellation, and observable failures.
+Evaluate scheduled and durable background processing, Telegram Bot API, and Browser Push API. Add opt-in browser and Telegram notifications, delivery preferences, analytics, and approved measurement definitions. Design background work with retries, idempotency, controlled concurrency, cancellation, and observable failures.
 
 ## Planned phase: Hosting and communities
 

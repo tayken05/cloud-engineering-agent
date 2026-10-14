@@ -1,6 +1,6 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the same checksum-locked migration to development and production. Task 5 adds the Sources read path, Task 6 adds `source_items` ingestion, and Task 7 adds a scheduled collector with durable run monitoring. The only application write route is the production-only, secret-authenticated Cron handler; no browser or public administrative write interface exists.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the initial migration to development and production. Task 7 adds durable collection monitoring, and Task 9 adds the Jobs & Opportunities model through a separate forward migration. The only application write route is the production-only, secret-authenticated news Cron handler; job population remains operator-only with no browser or public administrative write interface.
 
 ## Dependencies and boundaries
 
@@ -20,6 +20,8 @@ erDiagram
     sources ||--o{ source_items : publishes
     source_items ||--o{ story_source_items : supplies_evidence
     stories ||--o{ story_source_items : groups_evidence
+    job_employers ||--o{ job_sources : owns
+    job_sources ||--o{ jobs : publishes
     collection_runs {
       uuid id PK
       collection_run_status status
@@ -33,6 +35,9 @@ erDiagram
 | --- | --- | --- |
 | `sources` | Registered official feeds, publishers, engineering organizations, and communities | Generated UUID; unique stable `key`; unique registered `canonical_url`; name/kind; optional primary topic and reliability assessment; priority, active flag, ingestion cursor, last collection time |
 | `source_items` | Individual articles, release notes, announcements, and discussions | Generated UUID; required source attribution; optional provider `external_id`; original and canonical URLs; title, optional kind/author/summary/topic; publication, first collection, and last-seen times; optional content hash; processing/retry fields; verification fields |
+| `job_employers` | Verified employer identities | Generated UUID; unique slug and website; careers verification URL; verification and audit timestamps |
+| `job_sources` | Employer recruiting boards or authorized publishing sources | Generated UUID; restrictive employer FK; provider plus external-board identity; unique canonical URL; active and verification metadata |
+| `jobs` | Public vacancies and their permitted summarized metadata | Generated UUID; restrictive source FK; unique source/external identity, slug, and listing URL; category and specialization; nullable work, geography, salary, date, qualification, and eligibility fields; status, verification evidence, content hash, and audit timestamps |
 | `stories` | Distinct developments that may be reported by several publishers | Generated UUID; unique stable `deduplication_key`; title, optional summary/topic/development occurrence time; verification fields; archival timestamp |
 | `story_source_items` | Many-to-many links between developments and their evidence | Composite primary key `(story_id, source_item_id)`; evidence role (`supports`, `contradicts`, or `context`), notes, link timestamp |
 | `collection_runs` | Durable monitoring and concurrency state for scheduled/manual collection | Generated UUID; trigger/status; bounded lease token/expiry; start/finish times; processed and failed source keys; inserted/updated/unchanged counts; safe failure code |
@@ -176,7 +181,15 @@ No development or recovery branch object was changed. No test records were inser
 
 Review the source-scoped identity rules and canonicalization policy before adding publishers whose feeds use mutable or nonunique links. Reliability/priority scales, deterministic story grouping, the primary-topic taxonomy, evidence retention, and verification audit history still require review before those features expand. The collected feed is not a completed verification product.
 
-Future tasks may add access control and personal preferences, feeds, bookmarks, digests, content drafts/memory, independent teaching categories, immutable provenance/review history, source fetch runs, and durable jobs. Add those tables only when their behavior is authorized. Data access and private hub information must remain server-side, with authorization before any private data is exposed through the currently public shell.
+Future tasks may add access control and personal preferences, feeds, bookmarks, digests, content drafts/memory, independent teaching categories, immutable provenance/review history, recurring job-discovery runs, and private marketplace data. Add those tables only when their behavior is authorized. Data access and private hub information must remain server-side, with authorization before any private data is exposed through the currently public shell.
+
+## Jobs migration and initial catalog — 2026-10-14
+
+`drizzle/0002_jobs_opportunities.sql` is a forward-only additive migration containing 3 tables, 7 enums, 58 columns, 34 named constraints, and 8 explicit query indexes. Its checksum is locked by operator tooling and it does not reference `neon_auth`. Development and production each contain the exact third Drizzle history record. The migration inserted no data and preserved all existing application row counts and the nine-table managed authentication catalog.
+
+The initial catalog contains 4 employers, 4 authorized recruiting sources, and 11 currently open vacancies. The importer validates exact Greenhouse, Ashby, and Lever identities immediately before a write, uses source/external ID plus slug and listing URL for conflict detection, and stores a deterministic content hash. A development repeat inserted zero rows; the production postflight reports all 11 retained with no pending inserts. Jobs without disclosed salary, deadline, publication date, experience, or employment type keep those columns null.
+
+Migration execution and catalog insertion are separate explicit commands. Both environments require exact direct endpoints and the reviewed three-record history. Production reads only `.env.production-migration.local`, requires mode `0600`, and prompts for an endpoint-bearing confirmation. The importer does not delete records, run migrations, modify news data, or access `neon_auth`. Ordinary `npm ci`, builds, application imports, page requests, the existing daily Cron, and Vercel deployment do not call either tool.
 
 ## Current tooling limitations
 

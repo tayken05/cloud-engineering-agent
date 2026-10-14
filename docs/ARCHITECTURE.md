@@ -1,17 +1,17 @@
 # Architecture
 
-Status: application shell deployed; database migrations are validated on development and production; the 12-source Technology Sources Catalog and 12-feed bounded news collector are live. Daily automated scheduling is implemented. Story grouping/verification and the remaining product workflows remain planned.
+Status: the deployed application includes the responsive shell, 12-source daily news collector, and a public Jobs & Opportunities Hub backed by Neon development and production. Story grouping, recurring job discovery, accounts, applications, and the remaining product workflows remain planned.
 
 ## Current application
 
 - Next.js 16 App Router with React and strict TypeScript on Node.js 24 LTS.
 - Development and production build use Next.js's supported Webpack mode. Tailwind CSS uses its official PostCSS plugin and root `postcss.config.mjs`.
 - npm provides dependency management; `package-lock.json` is committed for reproducible installs with `npm ci`.
-- `src/app/` holds the shared root layout, twelve explicit routes, and global Tailwind CSS with light/dark design tokens.
+- `src/app/` holds the shared root layout, thirteen workspace routes, dynamic job-detail pages, a sitemap, and global Tailwind CSS with light/dark design tokens.
 - `@/*` resolves to `src/*`.
 - Root configuration contains Next.js, TypeScript, and ESLint settings.
 - `docs/` contains product requirements, roadmap, architecture, and decisions. Root `AGENTS.md` governs coding-agent work.
-- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata and `/stories` lists collected publisher updates from PostgreSQL; the other ten feature routes remain descriptive empty states. Verified story creation, content, engagement, private-data workflows, and authentication remain planned.
+- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata, `/stories` lists collected publisher updates, and `/jobs` plus `/jobs/[slug]` present verified employer vacancies from PostgreSQL. The remaining feature routes stay descriptive empty states. Verified story creation, content, engagement, private-data workflows, and authentication remain planned.
 
 ## Implemented application shell
 
@@ -50,6 +50,17 @@ Task 4B.9 adds a manual production migration boundary without adding runtime dat
 The application owns the new objects in `public` and the migration record in `drizzle`; Neon owns `neon_auth`. The production runner requires the verified nine-table authentication baseline and compares authentication catalog fingerprints around migration. It contains no authentication DDL or DML. Endpoint-to-branch ownership must still be reverified through Neon metadata immediately before a future authorized execution because PostgreSQL cannot attest a Neon branch name from SQL alone.
 
 Task 4B.10 executed the initial production migration through this boundary, and Task 7 added the collection-run migration. The current schema has five application tables plus Drizzle history. Task 8 keeps the schema unchanged, expands the approved catalog to 12 sources, and expands collection from six to 12 feeds. `stories` and `story_source_items` remain empty, and the managed `neon_auth` catalog remains outside application writes.
+
+Task 9 adds forward migration `0002_jobs_opportunities.sql`: `job_employers`, `job_sources`, and `jobs`, plus seven focused enums. Employers own recruiting sources; sources own vacancies. Provider/external identifiers, slugs, and listing URLs enforce repeatable identity. Nullable location, salary, date, and qualification fields preserve absence rather than inventing facts. Exact-endpoint runners apply the migration and idempotent initial catalog separately; production requires interactive confirmations and before/after Neon Auth fingerprints.
+
+## Jobs & Opportunities Hub — Task 9
+
+- `/jobs` is a request-rendered Server Component with bounded 12-record pages, validated shareable filters, newest-first ordering, and a fixed safe database error state. It filters by search text, category, employer, specialization, country, workplace, experience, employment, status, and disclosed salary.
+- `/jobs/[slug]` exposes a stable canonical detail page, verified employer/source evidence, accurate nullable facts, and an external **Apply on Employer Website** link. Closed and expired records are labelled, hidden from application calls to action, and marked `noindex`.
+- `src/server/jobs/list-jobs.ts` is the server-only read boundary. It uses the existing lazy pooled Neon client and fixed query limits. Browser code receives no credentials and no administrative mutation surface exists.
+- `sitemap.xml` contains the Jobs index and current open detail pages. JobPosting JSON-LD is fail-closed: it requires an open listing, a genuine publication time, adequate responsibilities and requirements, valid location eligibility, and an explicitly reviewed eligibility flag. The initial summarized catalog deliberately emits no JobPosting markup.
+- Operator tooling verifies current records against the public Greenhouse, Ashby, and Lever APIs before insertion. It accepts only exact direct development/production endpoints, reviewed migration history, official provider hosts, and an idempotent conflict-free plan. Production also requires an interactive phrase. No build, page request, Cron run, or deployment can invoke it.
+- Recurring discovery, job expiry automation, employer/candidate accounts, applications, CV collection, talent verification, messaging, payments, and marketplace workflows are outside Task 9.
 
 ## Technology Sources Catalog — Task 5
 

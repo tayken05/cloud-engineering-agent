@@ -15,6 +15,7 @@ const routes = [
   ["/inbox", "Inbox", "Coming in a future phase"],
   ["/analytics", "Analytics", "Coming in a future phase"],
   ["/sources", "Sources", "Registered catalog"],
+  ["/jobs", "Jobs &amp; Opportunities", "Official employer listings"],
   ["/settings", "Settings", "Coming in a future phase"],
 ];
 

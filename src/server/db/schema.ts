@@ -1,10 +1,12 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   char,
   check,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -40,6 +42,29 @@ export const collectionRunStatus = pgEnum("collection_run_status", [
   "running", "succeeded", "partially_succeeded", "failed", "skipped",
 ]);
 export const collectionRunTrigger = pgEnum("collection_run_trigger", ["scheduled", "manual"]);
+export const jobSourceProvider = pgEnum("job_source_provider", [
+  "greenhouse", "lever", "ashby", "employer",
+]);
+export const jobCategory = pgEnum("job_category", [
+  "cloud_engineering", "devops_infrastructure", "devsecops", "networking",
+  "cybersecurity", "linux", "site_reliability", "platform_engineering",
+  "software_engineering", "ai_engineering",
+]);
+export const employmentType = pgEnum("employment_type", [
+  "full_time", "part_time", "contract", "temporary", "internship",
+]);
+export const experienceLevel = pgEnum("experience_level", [
+  "entry_level", "junior", "mid_level", "senior", "lead", "manager", "executive",
+]);
+export const workplaceArrangement = pgEnum("workplace_arrangement", [
+  "remote", "hybrid", "onsite",
+]);
+export const jobStatus = pgEnum("job_status", [
+  "open", "expired", "closed", "unverified",
+]);
+export const salaryPayPeriod = pgEnum("salary_pay_period", [
+  "hour", "day", "week", "month", "year",
+]);
 
 const auditColumns = () => ({
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -194,6 +219,117 @@ export const collectionRuns = pgTable("collection_runs", {
   `),
 ]);
 
+export const jobEmployers = pgTable("job_employers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  slug: varchar("slug", { length: 128 }).notNull(),
+  name: text("name").notNull(),
+  websiteUrl: varchar("website_url", { length: 2048 }).notNull(),
+  verificationUrl: varchar("verification_url", { length: 2048 }).notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+  ...auditColumns(),
+}, (table) => [
+  unique("job_employers_slug_unique").on(table.slug),
+  unique("job_employers_website_url_unique").on(table.websiteUrl),
+  check("job_employers_slug_format", sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
+  check("job_employers_name_not_blank", sql`length(btrim(${table.name})) > 0`),
+  check("job_employers_website_url_format", sql`${table.websiteUrl} ~ '^https://'`),
+  check("job_employers_verification_url_format", sql`${table.verificationUrl} ~ '^https://'`),
+]);
+
+export const jobSources = pgTable("job_sources", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employerId: uuid("employer_id").notNull().references(() => jobEmployers.id, { onDelete: "restrict" }),
+  provider: jobSourceProvider("provider").notNull(),
+  externalSourceId: varchar("external_source_id", { length: 256 }).notNull(),
+  canonicalUrl: varchar("canonical_url", { length: 2048 }).notNull(),
+  verificationUrl: varchar("verification_url", { length: 2048 }).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull(),
+  ...auditColumns(),
+}, (table) => [
+  unique("job_sources_provider_external_id_unique").on(table.provider, table.externalSourceId),
+  unique("job_sources_canonical_url_unique").on(table.canonicalUrl),
+  index("job_sources_employer_active_idx").on(table.employerId, table.isActive),
+  check("job_sources_external_id_not_blank", sql`length(btrim(${table.externalSourceId})) > 0`),
+  check("job_sources_canonical_url_format", sql`${table.canonicalUrl} ~ '^https://'`),
+  check("job_sources_verification_url_format", sql`${table.verificationUrl} ~ '^https://'`),
+]);
+
+export const jobs = pgTable("jobs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sourceId: uuid("source_id").notNull().references(() => jobSources.id, { onDelete: "restrict" }),
+  externalId: varchar("external_id", { length: 512 }).notNull(),
+  slug: varchar("slug", { length: 180 }).notNull(),
+  title: text("title").notNull(),
+  specialization: text("specialization"),
+  category: jobCategory("category").notNull(),
+  employmentType: employmentType("employment_type"),
+  experienceLevel: experienceLevel("experience_level"),
+  workplaceArrangement: workplaceArrangement("workplace_arrangement"),
+  countryCode: char("country_code", { length: 2 }),
+  countryName: varchar("country_name", { length: 128 }),
+  region: text("region"),
+  city: text("city"),
+  locationText: text("location_text").notNull(),
+  remoteCountries: text("remote_countries").array(),
+  remoteRestriction: text("remote_restriction"),
+  salaryMin: bigint("salary_min", { mode: "number" }),
+  salaryMax: bigint("salary_max", { mode: "number" }),
+  salaryCurrency: char("salary_currency", { length: 3 }),
+  salaryPayPeriod: salaryPayPeriod("salary_pay_period"),
+  overview: text("overview").notNull(),
+  responsibilities: text("responsibilities").array().default(sql`'{}'::text[]`).notNull(),
+  requirements: text("requirements").array().default(sql`'{}'::text[]`).notNull(),
+  skills: text("skills").array().default(sql`'{}'::text[]`).notNull(),
+  certifications: text("certifications").array().default(sql`'{}'::text[]`).notNull(),
+  applicationUrl: varchar("application_url", { length: 2048 }).notNull(),
+  sourceListingUrl: varchar("source_listing_url", { length: 2048 }).notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  collectedAt: timestamp("collected_at", { withTimezone: true }).defaultNow().notNull(),
+  lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull(),
+  applicationDeadline: timestamp("application_deadline", { withTimezone: true }),
+  status: jobStatus("status").default("unverified").notNull(),
+  providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
+  verificationEvidence: text("verification_evidence").notNull(),
+  providerMetadata: jsonb("provider_metadata").$type<Readonly<Record<string, string | boolean | number | null>> | null>(),
+  contentHash: char("content_hash", { length: 64 }).notNull(),
+  structuredDataEligible: boolean("structured_data_eligible").default(false).notNull(),
+  ...auditColumns(),
+}, (table) => [
+  unique("jobs_source_external_id_unique").on(table.sourceId, table.externalId),
+  unique("jobs_slug_unique").on(table.slug),
+  unique("jobs_source_listing_url_unique").on(table.sourceListingUrl),
+  index("jobs_status_published_idx").on(table.status, table.publishedAt),
+  index("jobs_category_status_idx").on(table.category, table.status),
+  index("jobs_country_status_idx").on(table.countryCode, table.status),
+  index("jobs_workplace_status_idx").on(table.workplaceArrangement, table.status),
+  index("jobs_experience_status_idx").on(table.experienceLevel, table.status),
+  index("jobs_employment_status_idx").on(table.employmentType, table.status),
+  index("jobs_source_verified_idx").on(table.sourceId, table.lastVerifiedAt),
+  check("jobs_external_id_not_blank", sql`length(btrim(${table.externalId})) > 0`),
+  check("jobs_slug_format", sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
+  check("jobs_title_not_blank", sql`length(btrim(${table.title})) > 0`),
+  check("jobs_location_not_blank", sql`length(btrim(${table.locationText})) > 0`),
+  check("jobs_overview_not_blank", sql`length(btrim(${table.overview})) > 0`),
+  check("jobs_application_url_format", sql`${table.applicationUrl} ~ '^https://'`),
+  check("jobs_source_listing_url_format", sql`${table.sourceListingUrl} ~ '^https://'`),
+  check("jobs_country_pair", sql`(${table.countryCode} IS NULL) = (${table.countryName} IS NULL)`),
+  check("jobs_country_code_format", sql`${table.countryCode} IS NULL OR ${table.countryCode} ~ '^[A-Z]{2}$'`),
+  check("jobs_salary_complete", sql`
+    (${table.salaryMin} IS NULL AND ${table.salaryMax} IS NULL AND ${table.salaryCurrency} IS NULL AND ${table.salaryPayPeriod} IS NULL) OR
+    ((${table.salaryMin} IS NOT NULL OR ${table.salaryMax} IS NOT NULL) AND ${table.salaryCurrency} ~ '^[A-Z]{3}$' AND ${table.salaryPayPeriod} IS NOT NULL)
+  `),
+  check("jobs_salary_range", sql`
+    (${table.salaryMin} IS NULL OR ${table.salaryMin} >= 0) AND
+    (${table.salaryMax} IS NULL OR ${table.salaryMax} >= 0) AND
+    (${table.salaryMin} IS NULL OR ${table.salaryMax} IS NULL OR ${table.salaryMax} >= ${table.salaryMin})
+  `),
+  check("jobs_deadline_after_publication", sql`${table.publishedAt} IS NULL OR ${table.applicationDeadline} IS NULL OR ${table.applicationDeadline} >= ${table.publishedAt}`),
+  check("jobs_verified_after_collection", sql`${table.lastVerifiedAt} >= ${table.collectedAt}`),
+  check("jobs_verification_evidence_not_blank", sql`length(btrim(${table.verificationEvidence})) > 0`),
+  check("jobs_content_hash_format", sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`),
+]);
+
 export const sourcesRelations = relations(sources, ({ many }) => ({ items: many(sourceItems) }));
 export const sourceItemsRelations = relations(sourceItems, ({ one, many }) => ({
   source: one(sources, { fields: [sourceItems.sourceId], references: [sources.id] }),
@@ -203,6 +339,14 @@ export const storiesRelations = relations(stories, ({ many }) => ({ evidence: ma
 export const storySourceItemsRelations = relations(storySourceItems, ({ one }) => ({
   story: one(stories, { fields: [storySourceItems.storyId], references: [stories.id] }),
   item: one(sourceItems, { fields: [storySourceItems.sourceItemId], references: [sourceItems.id] }),
+}));
+export const jobEmployersRelations = relations(jobEmployers, ({ many }) => ({ sources: many(jobSources) }));
+export const jobSourcesRelations = relations(jobSources, ({ one, many }) => ({
+  employer: one(jobEmployers, { fields: [jobSources.employerId], references: [jobEmployers.id] }),
+  jobs: many(jobs),
+}));
+export const jobsRelations = relations(jobs, ({ one }) => ({
+  source: one(jobSources, { fields: [jobs.sourceId], references: [jobSources.id] }),
 }));
 
 export type Source = typeof sources.$inferSelect;
@@ -215,3 +359,9 @@ export type StorySourceItem = typeof storySourceItems.$inferSelect;
 export type NewStorySourceItem = typeof storySourceItems.$inferInsert;
 export type CollectionRun = typeof collectionRuns.$inferSelect;
 export type NewCollectionRun = typeof collectionRuns.$inferInsert;
+export type JobEmployer = typeof jobEmployers.$inferSelect;
+export type NewJobEmployer = typeof jobEmployers.$inferInsert;
+export type JobSource = typeof jobSources.$inferSelect;
+export type NewJobSource = typeof jobSources.$inferInsert;
+export type Job = typeof jobs.$inferSelect;
+export type NewJob = typeof jobs.$inferInsert;
