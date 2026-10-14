@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { getDatabaseUrl } from "../src/server/db/environment.ts";
-import { sources, sourceItems, stories, storySourceItems } from "../src/server/db/schema.ts";
+import { collectionRuns, sources, sourceItems, stories, storySourceItems } from "../src/server/db/schema.ts";
 import * as schema from "../src/server/db/schema.ts";
 
 const { generateDrizzleJson, generateMigration } = createRequire(import.meta.url)("drizzle-kit/api");
@@ -90,24 +90,39 @@ test("migration snapshot preserves the declared columns, keys, indexes, and fore
   }
 });
 
-test("initial migration contains only the declared additive schema and journal entry", async () => {
+test("migration history contains only reviewed additive schema entries", async () => {
   const journal = JSON.parse(await readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"));
-  assert.equal(journal.entries.length, 1);
-  const migration = await readFile(new URL(`../drizzle/${journal.entries[0].tag}.sql`, import.meta.url), "utf8");
-  const statements = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
-  assert.ok(statements.length > 0);
-  for (const statement of statements) {
-    assert.match(statement, /^(CREATE TYPE|CREATE TABLE|CREATE INDEX|CREATE UNIQUE INDEX|ALTER TABLE .* ADD CONSTRAINT)/);
-    assert.doesNotMatch(statement, /^(DROP|TRUNCATE|DELETE|INSERT|UPDATE)\b/);
+  assert.deepEqual(journal.entries.map((entry) => entry.tag), [
+    "0000_initial_intelligence",
+    "0001_collection_runs",
+  ]);
+  for (const entry of journal.entries) {
+    const migration = await readFile(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8");
+    const statements = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
+    assert.ok(statements.length > 0);
+    for (const statement of statements) {
+      assert.match(statement, /^(CREATE TYPE|CREATE TABLE|CREATE INDEX|CREATE UNIQUE INDEX|ALTER TABLE .* ADD CONSTRAINT)/);
+      assert.doesNotMatch(statement, /^(DROP|TRUNCATE|DELETE|INSERT|UPDATE)\b/);
+      assert.doesNotMatch(statement, /neon_auth/i);
+    }
   }
-  assert.equal((migration.match(/CREATE TABLE /g) ?? []).length, 4);
-  assert.equal((migration.match(/FOREIGN KEY /g) ?? []).length, 3);
 });
 
-test("the entire existing SQL migration matches fresh offline generation from the schema", async () => {
+test("the collection-run migration matches fresh offline generation from the initial snapshot", async () => {
   // Generate in memory only: no files, credentials, connections, or schema execution.
-  const generated = await generateMigration(generateDrizzleJson({}), generateDrizzleJson(schema));
-  const migration = await readFile(new URL("../drizzle/0000_initial_intelligence.sql", import.meta.url), "utf8");
+  const initialSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0000_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(initialSnapshot, generateDrizzleJson(schema));
+  const migration = await readFile(new URL("../drizzle/0001_collection_runs.sql", import.meta.url), "utf8");
   const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the monitoring table snapshot matches the declared schema", async () => {
+  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0001_snapshot.json", import.meta.url), "utf8"));
+  const declared = getTableConfig(collectionRuns);
+  const stored = snapshot.tables["public.collection_runs"];
+  assert.ok(stored);
+  assert.deepEqual(Object.keys(stored.columns).sort(), declared.columns.map((column) => column.name).sort());
+  assert.deepEqual(Object.keys(stored.indexes).sort(), declared.indexes.map((index) => index.config.name).sort());
+  assert.deepEqual(Object.keys(stored.checkConstraints).sort(), declared.checks.map((check) => check.name).sort());
 });

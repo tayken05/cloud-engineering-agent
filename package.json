@@ -17,6 +17,8 @@
     "test:sources": "node --conditions=react-server --test tests/sources-catalog.test.mjs tests/source-catalog-guard.test.mjs",
     "test:sources:http": "node --test tests/sources-http.test.mjs",
     "test:news": "node --conditions=react-server --test tests/news-ingestion.test.mjs tests/news-ingestion-guard.test.mjs",
+    "test:scheduler": "node --conditions=react-server --test tests/scheduler.test.mjs tests/collection-runs-migration-guard.test.mjs",
+    "test:scheduler:development": "node --conditions=react-server scripts/scheduler-development-verification.mjs",
     "test:news:http": "node --test tests/news-http.test.mjs",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
@@ -25,6 +27,8 @@
     "db:seed:sources:production": "node --conditions=react-server scripts/source-catalog-seed.mjs --production",
     "db:ingest:news:development": "node --conditions=react-server scripts/news-ingestion.mjs --development",
     "db:ingest:news:production": "node --conditions=react-server scripts/news-ingestion.mjs --production",
+    "db:migrate:collection-runs:development": "node scripts/collection-runs-migration.mjs --development",
+    "db:migrate:collection-runs:production": "node scripts/collection-runs-migration.mjs --production",
     "db:migrate:production:preflight": "node scripts/production-migration.mjs --preflight",
     "db:migrate:production": "node scripts/production-migration.mjs"
   },

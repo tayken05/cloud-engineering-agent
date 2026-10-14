@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -35,6 +36,10 @@ export const sourceItemKind = pgEnum("source_item_kind", [
   "article", "release_note", "announcement", "discussion",
 ]);
 export const evidenceRole = pgEnum("evidence_role", ["supports", "contradicts", "context"]);
+export const collectionRunStatus = pgEnum("collection_run_status", [
+  "running", "succeeded", "partially_succeeded", "failed", "skipped",
+]);
+export const collectionRunTrigger = pgEnum("collection_run_trigger", ["scheduled", "manual"]);
 
 const auditColumns = () => ({
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -144,6 +149,51 @@ export const storySourceItems = pgTable("story_source_items", {
   index("story_source_items_item_idx").on(table.sourceItemId),
 ]);
 
+export const collectionRuns = pgTable("collection_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  trigger: collectionRunTrigger("trigger").notNull(),
+  status: collectionRunStatus("status").default("running").notNull(),
+  leaseToken: uuid("lease_token"),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  processedSourceKeys: text("processed_source_keys").array().default(sql`'{}'::text[]`).notNull(),
+  failedSourceKeys: text("failed_source_keys").array().default(sql`'{}'::text[]`).notNull(),
+  sourcesAttempted: integer("sources_attempted").default(0).notNull(),
+  sourcesSucceeded: integer("sources_succeeded").default(0).notNull(),
+  sourcesFailed: integer("sources_failed").default(0).notNull(),
+  itemsInserted: integer("items_inserted").default(0).notNull(),
+  itemsUpdated: integer("items_updated").default(0).notNull(),
+  itemsUnchanged: integer("items_unchanged").default(0).notNull(),
+  failureCode: varchar("failure_code", { length: 128 }),
+  ...auditColumns(),
+}, (table) => [
+  uniqueIndex("collection_runs_single_running_idx")
+    .on(sql`(true)`)
+    .where(sql`${table.status} = 'running'`),
+  index("collection_runs_status_finished_idx").on(table.status, table.finishedAt),
+  index("collection_runs_started_idx").on(table.startedAt),
+  check("collection_runs_counts_nonnegative", sql`
+    ${table.sourcesAttempted} >= 0 AND ${table.sourcesSucceeded} >= 0 AND
+    ${table.sourcesFailed} >= 0 AND ${table.itemsInserted} >= 0 AND
+    ${table.itemsUpdated} >= 0 AND ${table.itemsUnchanged} >= 0
+  `),
+  check("collection_runs_source_counts_consistent", sql`
+    ${table.sourcesSucceeded} + ${table.sourcesFailed} = ${table.sourcesAttempted} AND
+    cardinality(${table.processedSourceKeys}) = ${table.sourcesAttempted} AND
+    cardinality(${table.failedSourceKeys}) = ${table.sourcesFailed}
+  `),
+  check("collection_runs_lease_state", sql`
+    (${table.status} = 'running' AND ${table.leaseToken} IS NOT NULL AND
+      ${table.leaseExpiresAt} IS NOT NULL AND ${table.finishedAt} IS NULL) OR
+    (${table.status} <> 'running' AND ${table.leaseToken} IS NULL AND
+      ${table.leaseExpiresAt} IS NULL AND ${table.finishedAt} IS NOT NULL)
+  `),
+  check("collection_runs_finished_after_start", sql`
+    ${table.finishedAt} IS NULL OR ${table.finishedAt} >= ${table.startedAt}
+  `),
+]);
+
 export const sourcesRelations = relations(sources, ({ many }) => ({ items: many(sourceItems) }));
 export const sourceItemsRelations = relations(sourceItems, ({ one, many }) => ({
   source: one(sources, { fields: [sourceItems.sourceId], references: [sources.id] }),
@@ -163,3 +213,5 @@ export type Story = typeof stories.$inferSelect;
 export type NewStory = typeof stories.$inferInsert;
 export type StorySourceItem = typeof storySourceItems.$inferSelect;
 export type NewStorySourceItem = typeof storySourceItems.$inferInsert;
+export type CollectionRun = typeof collectionRuns.$inferSelect;
+export type NewCollectionRun = typeof collectionRuns.$inferInsert;

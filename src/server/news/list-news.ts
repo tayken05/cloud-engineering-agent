@@ -4,7 +4,7 @@ import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 
 import type { NewsFilters } from "@/features/news/news-filters";
 import { createDatabase } from "@/server/db/client";
-import { sourceItems, sources } from "@/server/db/schema";
+import { collectionRuns, sourceItems, sources } from "@/server/db/schema";
 
 export const NEWS_QUERY_LIMIT = 100;
 
@@ -28,6 +28,7 @@ export type NewsSourceOption = Readonly<{
 
 export type NewsCatalog = Readonly<{
   items: readonly NewsRecord[];
+  lastSuccessfulCollectionAt: Date | null;
   sources: readonly NewsSourceOption[];
 }>;
 
@@ -48,7 +49,7 @@ export async function listNews(
 
   try {
     const database = createDatabase(options);
-    const [items, publishers] = await Promise.all([
+    const [items, publishers, latestRuns] = await Promise.all([
       database
         .select({
           author: sourceItems.author,
@@ -72,8 +73,18 @@ export async function listNews(
         .from(sourceItems)
         .innerJoin(sources, eq(sourceItems.sourceId, sources.id))
         .orderBy(sources.name),
+      database
+        .select({ finishedAt: collectionRuns.finishedAt })
+        .from(collectionRuns)
+        .where(eq(collectionRuns.status, "succeeded"))
+        .orderBy(desc(collectionRuns.finishedAt))
+        .limit(1),
     ]);
-    return Object.freeze({ items, sources: publishers });
+    return Object.freeze({
+      items,
+      lastSuccessfulCollectionAt: latestRuns[0]?.finishedAt ?? null,
+      sources: publishers,
+    });
   } catch {
     throw new NewsQueryError();
   }

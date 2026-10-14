@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: visual shell deployed; the four-table intelligence schema and curated source catalog exist in Neon development and production; Task 6 adds a guarded, manually invoked six-feed collector and the database-backed Stories & News page. Automated scheduling, verified story processing, content, engagement, and private-data capabilities below remain planned.
+Status: visual shell deployed; the intelligence schema, curated source catalog, and collected publisher metadata exist in Neon development and production. Task 7 adds protected daily collection, durable PostgreSQL run monitoring, bounded retry, lease-based concurrency control, and factual freshness on Stories & News. Verified story processing, content, engagement, and private-data capabilities below remain planned.
 Recorded: 2026-10-12.
 
 ## Vision and boundaries
@@ -100,12 +100,12 @@ Integration direction and current status:
 
 | Technology | Intended future role |
 | --- | --- |
-| Neon PostgreSQL | Four-table schema, initial trusted-source catalog, and 110 collected publisher items on isolated development and production |
-| Drizzle ORM | Schema/migration foundation, bounded Sources/Stories reads, and guarded source-item persistence; future queries and migrations remain separately gated |
+| Neon PostgreSQL | Intelligence schema, source catalog, publisher items, and durable collection-run monitoring on isolated development and production |
+| Drizzle ORM | Reviewed migrations, bounded Sources/Stories reads, idempotent source-item persistence, and atomic collection leases |
 | OpenAI API | Research assistance, draft generation, and reply suggestions |
 | Vercel | Shell hosting implemented in Task 3B; future releases require task authorization |
 | Official X API where feasible | Approved tracking and engagement capabilities |
-| Scheduled and durable background processing | Ingestion, digests, retries, and other asynchronous work |
+| Scheduled and durable background processing | Daily Vercel Cron ingestion is implemented; digests and other asynchronous work remain planned |
 | Telegram Bot API | Approved private notifications and later community workflows |
 | Browser Push API | Opt-in browser notifications |
 

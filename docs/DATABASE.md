@@ -1,6 +1,6 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the same checksum-locked migration to development and production. Task 5 adds the Sources read path. Task 6 adds guarded `source_items` ingestion and a bounded public Stories read path. No public write interface exists.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the same checksum-locked migration to development and production. Task 5 adds the Sources read path, Task 6 adds `source_items` ingestion, and Task 7 adds a scheduled collector with durable run monitoring. The only application write route is the production-only, secret-authenticated Cron handler; no browser or public administrative write interface exists.
 
 ## Dependencies and boundaries
 
@@ -9,7 +9,7 @@ Use stable Drizzle ORM 0.45.4, Drizzle Kit 0.31.11, and `@neondatabase/serverles
 - `src/server/db/schema.ts`: pure PostgreSQL declarations, Drizzle relations, and inferred select/insert types. Drizzle Kit reads this file directly; it must not import application code or credentials.
 - `src/server/db/index.ts`: server-only application entry point. Future server code should import from here, never from a Client Component. Do not import the raw schema into client code.
 - `src/server/db/environment.ts`: lazy `DATABASE_URL` reader that checks URL syntax/protocol/host/database without echoing the value. Importing it never reads credentials or initializes a connection.
-- `src/server/db/client.ts`: lazy application client factory using Drizzle's Neon HTTP adapter. It reads the pooled `DATABASE_URL` only when a server request invokes a query and applies an eight-second abort signal. It does not connect at module load or during builds.
+- `src/server/db/client.ts`: lazy application client factory using Drizzle's Neon HTTP adapter. It reads the pooled `DATABASE_URL` only when a server request invokes a query and applies a 15-second abort signal. It does not connect at module load or during builds.
 - `drizzle.config.ts`: credential-free PostgreSQL generation configuration. It deliberately has no `dbCredentials` and does not load actual environment files.
 - `drizzle/`: generated SQL, schema snapshot, and migration journal. These are reviewable source artifacts, not disposable build output.
 
@@ -20,6 +20,13 @@ erDiagram
     sources ||--o{ source_items : publishes
     source_items ||--o{ story_source_items : supplies_evidence
     stories ||--o{ story_source_items : groups_evidence
+    collection_runs {
+      uuid id PK
+      collection_run_status status
+      timestamptz started_at
+      timestamptz finished_at
+      timestamptz lease_expires_at
+    }
 ```
 
 | Table | Purpose | Identity and important fields |
@@ -28,6 +35,7 @@ erDiagram
 | `source_items` | Individual articles, release notes, announcements, and discussions | Generated UUID; required source attribution; optional provider `external_id`; original and canonical URLs; title, optional kind/author/summary/topic; publication, first collection, and last-seen times; optional content hash; processing/retry fields; verification fields |
 | `stories` | Distinct developments that may be reported by several publishers | Generated UUID; unique stable `deduplication_key`; title, optional summary/topic/development occurrence time; verification fields; archival timestamp |
 | `story_source_items` | Many-to-many links between developments and their evidence | Composite primary key `(story_id, source_item_id)`; evidence role (`supports`, `contradicts`, or `context`), notes, link timestamp |
+| `collection_runs` | Durable monitoring and concurrency state for scheduled/manual collection | Generated UUID; trigger/status; bounded lease token/expiry; start/finish times; processed and failed source keys; inserted/updated/unchanged counts; safe failure code |
 
 All tables have timezone-aware `created_at` and `updated_at`. Writers must set `updated_at` explicitly on mutation; defaults initialize new rows, and no SQL triggers or ORM update hooks are installed. A story's `occurred_at` differs from a publisher's `published_at`; neither is inferred from collection time. Unknown publication times, topics, item kinds, and reliability remain NULL rather than being invented.
 
@@ -41,7 +49,8 @@ The fourteen primary-topic values preserve the wider hub and public cloud niche.
 - Canonical URLs require an HTTP(S) prefix and a maximum of 2048 bytes. The bound keeps URL-based B-tree identity keys manageable. It is a deliberate initial limit, not full URL validation. Future ingestion must validate URLs, reject embedded credentials, normalize safely, and enforce SSRF/redirect/content-size restrictions before fetching.
 - Unique item identities are `(source_id, external_id)` and `(source_id, canonical_url)`. PostgreSQL's default NULL-distinct uniqueness allows multiple items without external IDs while canonical-URL uniqueness still applies.
 - Optional content hashes must be lowercase 64-character SHA-256 strings. The hash index is nonunique: identical/syndicated content from separate sources is a duplicate candidate, not an automatic deletion or a second independent corroboration.
-- Processing attempt counts cannot be negative; last-seen time cannot precede first collection time. Pending/processed/failed/ignored states and attempt/retry/error fields prepare for operational processing without creating a scheduler or job system.
+- Processing attempt counts cannot be negative; last-seen time cannot precede first collection time. Collection-run counts and source-key arrays must agree, completion cannot precede start, and only a `running` row may hold a lease.
+- A partial unique index permits one `running` collection row at a time. A 240-second lease bounds crash recovery; the next invocation marks an expired lease failed before acquiring a new one. Completion checks and locks the active token in the same transaction as article persistence, so a late worker cannot commit after losing its lease.
 - An item or story marked `verified` must have a verification timestamp and nonblank notes. Explicit NULL checks prevent PostgreSQL CHECK's NULL semantics from bypassing this requirement.
 - The evidence composite key prevents duplicate links. Its leading story ID supports story evidence lookup; a reverse item index supports finding related stories.
 - Other indexes support source collection history, processing/retry selection, topic/publication feeds, topic/development queries, and verification-review queues. Revisit index needs with measured queries; no blanket indexes or premature search infrastructure.
@@ -57,7 +66,7 @@ Task 6 implements the first bounded identity and canonicalization policy:
 3. The operator transaction inserts missing items, advances last-seen time, and updates changed publisher metadata while preserving first collection and original URL. It does not advance a cursor because these initial feeds provide no reviewed cursor contract. Unique constraints protect concurrent insert races, and a final identity pass verifies the batch.
 4. Store a stable story grouping key assigned by a reviewed deterministic policy. Titles are not unique and are not a sufficient semantic deduplication key. Exact story-key uniqueness prevents repeated creation; similarity-based story discovery remains planned.
 5. Link evidence idempotently using the composite key. Preserve separate source attribution across publishers; content hashes and canonical URLs can flag possible syndication, not establish independence or verification.
-6. Fetching now uses bounded concurrency, timeouts/cancellation, response limits, idempotent writes, and sanitized errors. Durable retries/backoff, run history, atomic cursor advancement, versioned content snapshots, and verification-review invalidation remain future work.
+6. Fetching uses bounded concurrency, timeouts/cancellation, response limits, idempotent writes, and sanitized errors. Task 7 adds one bounded retry for failed publishers and durable run history. Atomic cursor advancement, versioned content snapshots, and verification-review invalidation remain future work.
 
 ## Technology Sources Catalog — Task 5
 
@@ -77,11 +86,19 @@ Before a write, both external-ID and canonical-URL matches are resolved. If they
 
 `scripts/news-ingestion.mjs` loads only ignored, permission-restricted direct credentials, validates the exact selected endpoint/database and migration history, requires at least four successful reviewed feeds, and fingerprints managed authentication objects across production writes. Production requires `--execute` and `INGEST APPROVED NEWS INTO NEON MAIN ep-spring-grass-b7iye83x` in a TTY. The command is absent from install/build/start/Vercel configuration and never runs a migration. Failed database writes are transactional; the initial development timestamp-constraint failure rolled back completely before the shared collection/last-seen timestamp was corrected and the operation retried.
 
-`src/server/news/list-news.ts` joins `source_items` to `sources`, validates filters, orders by publication time with collection fallback, and caps output at 100. `/stories` calls `connection()` before the uncached query, so builds remain credential-free. Errors become a fixed public state without provider diagnostics. There is no browser database client, public write endpoint, ingestion Server Action, schedule, or Cron job.
+`src/server/news/list-news.ts` joins `source_items` to `sources`, validates filters, orders by publication time with collection fallback, and caps output at 100. `/stories` calls `connection()` before the uncached query, so builds remain credential-free. Errors become a fixed public state without provider diagnostics. There is no browser database client, ingestion Server Action, or public administrative write endpoint.
+
+## Automatic collection and monitoring — Task 7
+
+Vercel Cron invokes `GET /api/cron/news` once daily using `0 6 * * *` in UTC. Hobby scheduling has hourly precision, so a run may begin between 06:00 and 06:59 UTC. The handler runs only when both Vercel's production indicators and a production-scoped `CRON_SECRET` are present. Missing configuration fails closed, invalid authorization returns 401, preview/local requests do no work, and responses/logs never contain credentials or provider diagnostics.
+
+The handler reuses the Task 6 allowlisted fetcher, parser, identity planner, and shared transactional persistence. Six feeds run with concurrency two, 15-second request limits, two redirects, a 2 MiB response cap, at most 20 items each, and one 750 ms retry for only the sources that failed. The route has a 225-second internal cancellation budget within Vercel Hobby's 300-second Fluid Compute limit and the 240-second database lease.
+
+Each invocation records `running`, `succeeded`, `partially_succeeded`, `failed`, or `skipped`, processed/failed source keys, item outcomes, and timestamps. Publisher failure details remain private; only fixed failure codes are stored. Stories & News exposes only the last fully successful completion time. A partial run is visible operationally but is not presented as a successful freshness timestamp. Vercel does not retry failed Cron invocations, so the next daily run recovers expired leases and retries publisher requests within its own bounded execution.
 
 ## Environment configuration
 
-`DATABASE_URL` is the pooled server-only Neon URL intended for future application queries. `DATABASE_URL_UNPOOLED` is the direct server-only URL reserved for separately authorized migration or session-level work. `.env.example` contains empty placeholders only; no live URL is necessary for generation, offline tests, type checking, or builds. Actual `.env*` files remain ignored, with a narrow exception for `.env.example`. Never use `NEXT_PUBLIC_*` database variables or include credentials in configuration files, errors, migration files, logs, or client bundles.
+`DATABASE_URL` is the pooled server-only Neon URL used for application queries and scheduled transactions. `DATABASE_URL_UNPOOLED` is the direct server-only URL reserved for separately authorized migration or session-level work. `CRON_SECRET` is a production-only Vercel Secret used solely for Cron authorization. `.env.example` contains empty placeholders only; no live value is necessary for generation, offline tests, type checking, or builds. Actual `.env*` files remain ignored, with a narrow exception for `.env.example`. Never use `NEXT_PUBLIC_*` database or Cron variables or include credentials in configuration files, errors, migration files, logs, or client bundles.
 
 The local `.env.local` contains both development connection settings and remains ignored and untracked. The URLs match the expected development endpoint and `neondb`. Runtime Sources/Stories reads use pooled `DATABASE_URL`; guarded administrative registration and ingestion use the direct value. Production administration reuses only the dedicated production credential file. No value is copied to source files or documentation.
 
@@ -102,7 +119,9 @@ Generated artifacts:
 
 - `drizzle/0000_initial_intelligence.sql`: six enums, four tables, three foreign keys, eight explicit indexes, and associated unique/check/primary-key constraints.
 - `drizzle/meta/0000_snapshot.json`: Drizzle's structural schema snapshot.
-- `drizzle/meta/_journal.json`: the single initial migration entry.
+- `drizzle/0001_collection_runs.sql`: two collection enums, one monitoring/lease table, four checks, one partial unique lease index, and two query indexes.
+- `drizzle/meta/0001_snapshot.json`: the post-Task 7 structural snapshot.
+- `drizzle/meta/_journal.json`: ordered initial and collection-monitoring migration entries.
 
 Task 4A verification passed: generation and history checks, unchanged-schema regeneration with no new migration, seven offline database tests, ESLint, strict TypeScript, and the production build without a required `DATABASE_URL`. The local production server served all twelve routes successfully, and the thirteen existing HTTP regression checks passed, including unknown-route 404. Live PostgreSQL execution and constraint results are recorded in the Task 4B.5 section below.
 

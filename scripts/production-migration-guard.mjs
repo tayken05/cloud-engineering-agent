@@ -152,11 +152,11 @@ export function assertMigrationArtifact(sql, journal) {
   if (sha256(sql) !== productionMigrationConfig.migrationSha256) {
     stop("The checked-in production migration checksum does not match the tested artifact.");
   }
-  if (!journal || journal.dialect !== "postgresql" || journal.entries?.length !== 1) {
-    stop("The Drizzle migration journal is not the reviewed single-entry history.");
+  if (!journal || journal.dialect !== "postgresql" || !Array.isArray(journal.entries) || journal.entries.length < 1) {
+    stop("The Drizzle migration journal does not contain the reviewed initial history entry.");
   }
 
-  const [entry] = journal.entries;
+  const entry = journal.entries[0];
   if (
     entry.idx !== 0 ||
     entry.tag !== productionMigrationConfig.migrationTag ||

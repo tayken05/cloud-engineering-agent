@@ -6,13 +6,13 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { Pool } from "@neondatabase/serverless";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-serverless";
 
-import { sourceItems, sources } from "../src/server/db/schema.ts";
+import { sources } from "../src/server/db/schema.ts";
 import { VERIFIED_FEEDS } from "../src/server/ingestion/feed-catalog.ts";
 import { collectFeeds } from "../src/server/ingestion/feed-fetcher.ts";
-import { planSourceItems } from "../src/server/ingestion/source-item-plan.ts";
+import { persistCollectedFeeds } from "../src/server/ingestion/source-item-persistence.ts";
 import { loadProductionCredential } from "./production-migration-guard.mjs";
 import { productionMigrationConfig } from "./production-migration.config.mjs";
 import {
@@ -159,92 +159,6 @@ function assertFeedSources(rows) {
   return byKey;
 }
 
-async function selectExistingItems(transaction, sourceId, items) {
-  const externalIds = items.flatMap((item) => item.externalId ? [item.externalId] : []);
-  const urls = items.map((item) => item.canonicalUrl);
-  const identities = [inArray(sourceItems.canonicalUrl, urls)];
-  if (externalIds.length > 0) identities.push(inArray(sourceItems.externalId, externalIds));
-  return transaction
-    .select({
-      author: sourceItems.author,
-      canonicalUrl: sourceItems.canonicalUrl,
-      externalId: sourceItems.externalId,
-      id: sourceItems.id,
-      primaryTopic: sourceItems.primaryTopic,
-      publishedAt: sourceItems.publishedAt,
-      summary: sourceItems.summary,
-      title: sourceItems.title,
-    })
-    .from(sourceItems)
-    .where(and(eq(sourceItems.sourceId, sourceId), or(...identities)));
-}
-
-async function persistFeeds(db, collection, collectedAt) {
-  return db.transaction(async (transaction) => {
-    const sourceMap = assertFeedSources(await selectFeedSources(transaction));
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let unchangedCount = 0;
-
-    for (const result of collection.successes) {
-      const source = sourceMap.get(result.config.sourceKey);
-      if (!source) stop("A collected feed lost its registered source mapping.");
-      const existing = await selectExistingItems(transaction, source.id, result.feed.items);
-      const plan = planSourceItems(existing, result.feed.items);
-      if (plan.inserts.length > 0) {
-        const inserted = await transaction
-          .insert(sourceItems)
-          .values(plan.inserts.map((item) => ({
-            author: item.author,
-            canonicalUrl: item.canonicalUrl,
-            collectedAt,
-            externalId: item.externalId,
-            kind: "article",
-            lastSeenAt: collectedAt,
-            originalUrl: item.originalUrl,
-            primaryTopic: item.primaryTopic,
-            publishedAt: item.publishedAt,
-            sourceId: source.id,
-            summary: item.summary,
-            title: item.title,
-          })))
-          .onConflictDoNothing()
-          .returning({ id: sourceItems.id });
-        insertedCount += inserted.length;
-      }
-      for (const update of plan.updates) {
-        await transaction
-          .update(sourceItems)
-          .set({
-            ...(update.changed ? {
-              author: update.item.author,
-              externalId: update.item.externalId ?? update.existing.externalId,
-              primaryTopic: update.item.primaryTopic,
-              publishedAt: update.item.publishedAt,
-              summary: update.item.summary,
-              title: update.item.title,
-              updatedAt: collectedAt,
-            } : {}),
-            lastSeenAt: collectedAt,
-          })
-          .where(eq(sourceItems.id, update.existing.id));
-        if (update.changed) updatedCount += 1;
-        else unchangedCount += 1;
-      }
-      const finalRows = await selectExistingItems(transaction, source.id, result.feed.items);
-      const finalPlan = planSourceItems(finalRows, result.feed.items);
-      if (finalPlan.inserts.length !== 0 || finalRows.length !== result.feed.items.length) {
-        stop("The source-item batch did not reach its approved idempotent state.");
-      }
-      await transaction
-        .update(sources)
-        .set({ lastCollectedAt: collectedAt, updatedAt: collectedAt })
-        .where(eq(sources.id, source.id));
-    }
-    return Object.freeze({ insertedCount, unchangedCount, updatedCount });
-  });
-}
-
 async function verifyStoredItems(client, sourceKeys) {
   const result = await client.query(`
     SELECT s.key, count(si.id)::integer AS item_count
@@ -339,7 +253,7 @@ async function main() {
 
     if (production) await confirmProduction();
     const repeated = await inspectDatabase(client, production);
-    const result = await persistFeeds(db, collection, new Date());
+    const result = await persistCollectedFeeds(db, collection, new Date());
     const after = await inspectDatabase(client, production);
     if (
       repeated.counts.sources !== after.counts.sources ||

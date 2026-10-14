@@ -100,19 +100,19 @@ Engagement: authorized X data where feasible → conversation hubs and Shared In
 
 Notifications: authorized application event → durable notification job → preference and consent checks → Telegram or Browser Push delivery → observable delivery result.
 
-Only the first bounded, manually invoked collection step exists. Evidence grouping/verification, AI generation, publishing, engagement, and notification flows remain proposals.
+The bounded collector now runs daily through a production-only, secret-authenticated Vercel Cron route. PostgreSQL records run outcomes and holds the recoverable concurrency lease; source-item constraints and transactional planning preserve idempotency. Evidence grouping/verification, AI generation, publishing, engagement, and notification flows remain proposals.
 
 ## Reliability and provenance
 
 - Await critical promises and handle failures explicitly; use `async/await` with appropriate error handling, bounded timeouts, and cancellation.
-- Plan background jobs with transient-failure retries, backoff, idempotency, controlled concurrency, and observable terminal failures.
+- Scheduled collection uses one bounded publisher retry, idempotent persistence, a PostgreSQL lease, and durable terminal run records. Apply the same principles to future jobs.
 - Preserve original links and separate publication, retrieval, and verification timestamps. Use timezone-aware timestamps and apply the user's timezone for display.
 - Keep verification status, uncertainty, duplicate relationships, and corrections auditable. Do not present inferred or AI-generated claims as verified facts.
 - Apply provider rate limits and permissions; do not assume a specific scheduled/durable processing provider before evaluating requirements.
 
 ## Planned technology choices
 
-Neon PostgreSQL stores the applied schema, source catalog, and collected publisher metadata on both isolated development and production `main`. Drizzle implements schema, migrations, and bounded Sources/Stories reads. The collector remains operator-invoked. OpenAI API is the AI direction. Vercel hosts the application. Official X API access is conditional on feasibility. Scheduled and durable processing, Telegram Bot API, and Browser Push API remain future directions.
+Neon PostgreSQL stores the applied schema, source catalog, collected publisher metadata, and collection-run records on both isolated development and production `main`. Drizzle implements schema, migrations, bounded reads, and transactional scheduled persistence. Vercel hosts the application and invokes the collector once daily at `0 6 * * *` UTC. OpenAI API is the AI direction. Official X API access is conditional on feasibility. Other durable processing, Telegram Bot API, and Browser Push API remain future directions.
 
 ## Security and project separation
 

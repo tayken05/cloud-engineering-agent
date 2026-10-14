@@ -39,6 +39,7 @@ export function validateDevelopmentDatabaseUrls(values) {
     connectionString: direct.connectionString,
     database: direct.database,
     endpoint: direct.endpoint,
+    pooledConnectionString: pooled.connectionString,
   });
 }
 

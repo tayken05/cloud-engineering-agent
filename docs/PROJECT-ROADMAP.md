@@ -89,9 +89,17 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Kept all writes in exact-endpoint guarded operator tooling. Production required the dedicated ignored credential and interactive phrase. No public write endpoint, schema migration, `neon_auth` change, story/evidence creation, Cron job, or automated schedule was added.
 - Verification covers RSS/Atom parsing, malformed/entity input, allowlists, size/content-type limits, failure isolation, deduplication/conflict planning, live development repeatability, production postflight, HTTP filters/empty state/secret absence, route regressions, lint, strict types, database checks, Webpack production build, and dependency audits.
 
+## Task 7: Automated technology news collection — implemented
+
+- Added one production Vercel Cron route at `/api/cron/news`, scheduled daily with `0 6 * * *` UTC and protected by a production-only Secret. Preview, local, missing-secret, and invalid-authorization requests fail closed.
+- Added `collection_runs` through the reviewed `0001_collection_runs.sql` migration on development and production. It records run state, timing, source outcomes, item counts, safe failure codes, and a 240-second recoverable database lease.
+- Reused the six-feed Task 6 pipeline with concurrency two, existing network/content bounds, one bounded retry for failed sources, transactional idempotent writes, and per-source failure isolation.
+- Added the latest fully successful collection timestamp to Stories & News without exposing operational errors. Development verified genuine fetching, repeat idempotency, concurrent skip behavior, expired-lease recovery, and partial failure records.
+- Scheduling activation, an authenticated production test, GitHub synchronization, and live deployment verification are part of the Task 7 rollout. The first platform-scheduled invocation remains pending until its configured UTC window occurs.
+
 ## Planned phase: Expanded verified intelligence
 
-When separately authorized, add durable collection runs, retries/backoff, scheduling, observability, source freshness, and cursor policies. Design deterministic story grouping and evidence review/corrections without treating publisher provenance as independent verification. The current collector stores bounded metadata only and is manually invoked.
+When separately authorized, design deterministic story grouping and evidence review/corrections without treating publisher provenance as independent verification. Review source cursor policies and richer private operational observability only when actual run history demonstrates a need. The collector stores bounded publisher metadata only.
 
 ## Planned phase: Personal Tech Intelligence Hub
 

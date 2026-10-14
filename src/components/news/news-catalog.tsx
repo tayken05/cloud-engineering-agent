@@ -14,6 +14,12 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
   year: "numeric",
 });
 
+const timestampFormatter = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+
 export function NewsFilters({
   filters,
   sources,
@@ -52,12 +58,15 @@ export function NewsFilters({
 export function NewsCatalog({ catalog }: { catalog: NewsCatalogData }) {
   if (catalog.items.length === 0) {
     return (
-      <section className="source-state" aria-labelledby="news-empty-title">
-        <span className="badge">0 collected items</span>
-        <h2 id="news-empty-title">No publisher updates match these filters</h2>
-        <p>Try another category or publisher, or clear the selected filters.</p>
-        <Link className="text-link" href="/stories">Clear all filters</Link>
-      </section>
+      <>
+        <CollectionFreshness lastSuccessfulCollectionAt={catalog.lastSuccessfulCollectionAt} />
+        <section className="source-state" aria-labelledby="news-empty-title">
+          <span className="badge">0 collected items</span>
+          <h2 id="news-empty-title">No publisher updates match these filters</h2>
+          <p>Try another category or publisher, or clear the selected filters.</p>
+          <Link className="text-link" href="/stories">Clear all filters</Link>
+        </section>
+      </>
     );
   }
 
@@ -72,6 +81,7 @@ export function NewsCatalog({ catalog }: { catalog: NewsCatalogData }) {
           {catalog.items.length} {catalog.items.length === 1 ? "item" : "items"}
         </span>
       </div>
+      <CollectionFreshness lastSuccessfulCollectionAt={catalog.lastSuccessfulCollectionAt} />
       <ol className="news-list">
         {catalog.items.map((item) => {
           const displayDate = item.publishedAt ?? item.collectedAt;
@@ -104,6 +114,29 @@ export function NewsCatalog({ catalog }: { catalog: NewsCatalogData }) {
         These entries are publisher-supplied metadata with original links. Collection records provenance; it does not independently verify a development or create a verified story.
       </p>
     </section>
+  );
+}
+
+function CollectionFreshness({
+  lastSuccessfulCollectionAt,
+}: {
+  lastSuccessfulCollectionAt: Date | null;
+}) {
+  if (!lastSuccessfulCollectionAt) {
+    return (
+      <p className="source-disclaimer">
+        No successful automated collection has been recorded yet. Existing publisher items may be older.
+      </p>
+    );
+  }
+
+  return (
+    <p className="source-disclaimer">
+      Last successful collection:{" "}
+      <time dateTime={lastSuccessfulCollectionAt.toISOString()}>
+        {timestampFormatter.format(lastSuccessfulCollectionAt)} UTC
+      </time>. The scheduler runs once daily; publisher or platform delays can affect freshness.
+    </p>
   );
 }
 

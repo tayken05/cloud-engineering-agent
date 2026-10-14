@@ -21,6 +21,7 @@ test("Stories & News renders collected publisher records without secrets", async
   const html = await getNews();
   assert.match(html, /Collected publisher updates/);
   assert.match(html, /Not independently verified/);
+  assert.match(html, /Last successful collection:/);
   assert.match(html, /AWS Architecture Blog|Google Cloud Blog|Cloudflare Blog/);
   assert.match(html, /target="_blank"/);
   assert.doesNotMatch(html, /postgres(?:ql)?:\/\//i);
