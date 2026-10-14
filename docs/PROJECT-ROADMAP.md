@@ -58,6 +58,20 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Passed 13 transaction-scoped integration scenarios and confirmed that rollback left all four tables empty. A second migrator invocation was a catalog/history no-op.
 - No production `main` connection, Vercel variable change, authentication-object change, application query path, commit, push, or deployment was introduced.
 
+## Task 4B.9: Production migration procedure — prepared locally, not executed
+
+- Added a production-only direct-connection configuration with the exact verified `main` endpoint, database, migration checksum, journal identity, expected application objects, and managed-auth baseline.
+- Added a credential-safe read-only preflight and a separately gated execution path. The latter requires a dedicated ignored `0600` file, explicit `--execute`, repeated catalog checks, and an exact interactive confirmation.
+- Added post-migration catalog verification for application tables, enums, keys, checks, foreign keys, indexes, history, empty data, and an unchanged `neon_auth` catalog fingerprint.
+- Production endpoint ownership must be reverified and schema modification must be separately approved immediately before execution. No production connection, SQL write, migration, Vercel change, deployment, commit, or push is part of preparation.
+
+## Task 4B.10: Initial production migration — completed
+
+- Passed the production-only read-only preflight against the verified direct `main` endpoint and `neondb`, with an empty application baseline, absent Drizzle history, and nine managed authentication tables.
+- Applied only the checksum-locked `0000_initial_intelligence.sql` through the guarded interactive Drizzle runner. The recovery checkpoint, development branch, and managed authentication schema were not modified.
+- Verified 4 empty application tables, 58 columns, 6 enums, all expected keys/checks/foreign keys, 17 indexes, and one matching migration-history row. The managed-auth catalog fingerprint remained unchanged, and repeat migration evaluation skips the applied entry.
+- Runtime database access, ingestion, application authentication, and data population remain future work. Normal application builds and Vercel deployments do not run migrations.
+
 ## Planned phase: Runtime data access and verified intelligence
 
 When separately authorized, design the server-only application data-access layer and ingestion behavior. Implement trusted-source validation, canonicalization, conflict-safe upserts, transactional cursor advancement, evidence review/corrections, and durable ingestion with retries, idempotency, timeouts, and controlled concurrency. The applied empty development schema does not implement those behaviors or authorize a production migration.

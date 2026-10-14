@@ -127,3 +127,19 @@ Treat the current project-owner-provided Neon dashboard mapping of `ep-sweet-bre
 Use `drizzle-orm/neon-serverless/migrator` with a one-connection Neon Pool so the application DDL and history insertion run transactionally. Verify the exact checked-in SQL checksum before execution. Do not use the nontransactional HTTP migrator for schema changes, `drizzle-kit push`, schema regeneration, pooler fallback, Vercel credentials, startup/build migrations, or any production connection.
 
 The development result matches the checked-in snapshot: 4 tables, 58 columns, 6 enums, 4 primary keys, 5 unique constraints, 3 restrictive foreign keys, 16 checks, and 17 total indexes. The Drizzle history has one matching record. Thirteen integration scenarios passed inside a rolled-back transaction, and a separate query confirmed zero residue. A second migrator invocation left the catalog fingerprint and single history row unchanged. Keep production migration, runtime data access, ingestion, commit, push, and deployment outside this task.
+
+## Task 4B.9 production migration preparation — 2026-10-14
+
+Prepare a committed operator-only runner instead of reusing `.env.local`, the development variable names, Drizzle Kit, or deployment configuration. The runner reads only `.env.production-migration.local`, requires mode `0600`, refuses symlinks and extra variables, and accepts only `PRODUCTION_DATABASE_URL_UNPOOLED`. It requires direct TLS access to `neondb` at exact endpoint `ep-spring-grass-b7iye83x`; therefore the development endpoint, pooler, recovery checkpoint, and all unknown endpoints fail closed. The credential never appears in source, command arguments, prompts, or logs.
+
+Lock production execution to the development-tested `0000_initial_intelligence.sql` byte checksum and journal identity. Before any write, require an explicit `--execute` mode, two catalog preflights, a safe `public` search path, the verified empty application baseline, absent Drizzle history, the nine-table managed-auth baseline, an interactive TTY, and the exact endpoint-bearing confirmation phrase. Apply with one acquired direct Neon client through `drizzle-orm/neon-serverless/migrator`; history belongs only in `drizzle.__drizzle_migrations` and application DDL belongs only in `public`.
+
+Treat endpoint-to-branch metadata revalidation and fresh production authorization as execution prerequisites. Task 4B.9 does not connect to production, create the credential file, or apply SQL. If a future run fails after modification begins, stop for catalog/history comparison and recovery review rather than retrying automatically.
+
+## Task 4B.10 initial production migration — 2026-10-14
+
+Apply the development-tested migration only after the production-only runner accepts the direct endpoint, exact database, checksum, empty application baseline, absent history, safe search path, and nine-table managed-auth baseline. Preserve the verified `pre-initial-migration` checkpoint without modification. Use the runner's exact interactive confirmation; do not use `drizzle-kit push` or deployment-time migrations.
+
+The migration and built-in postflight succeeded. An independent read-only catalog pass verified 4 tables, 58 columns, 6 enums, 4 primary keys, 5 unique constraints, 16 checks, 3 restrictive foreign keys, 17 indexes, one matching Drizzle history row, and zero application rows. The runner's before/after authentication catalog fingerprint comparison passed, and the managed authentication table count remained nine. Matching history makes the initial migration a no-op on a normal repeat.
+
+Keep production credentials only in the ignored permission-restricted migration file. Builds, startup, imports, and Vercel deployment remain unable to invoke the production runner automatically. Production schema availability does not authorize runtime queries, ingestion, authentication integration, or application features.

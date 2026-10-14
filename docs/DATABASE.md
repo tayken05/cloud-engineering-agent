@@ -1,6 +1,6 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.4 verifies pooled and direct read-only access to the isolated Neon development endpoint. Task 4B.5 applies the checked-in initial migration to that development endpoint and validates the live catalog and constraints. **No migration has been applied to production, and the application still has no runtime query path.** The application continues to display its existing static shell.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.4 verifies pooled and direct read-only access to the isolated Neon development endpoint. Task 4B.5 applies the checked-in initial migration to development, and Task 4B.10 applies the identical checksum-locked migration to production after guarded preflight. **The application still has no runtime query path.** The application continues to display its existing static shell.
 
 ## Dependencies and boundaries
 
@@ -89,7 +89,40 @@ The initial migration is generated from the schema into `drizzle/`. Review SQL t
 
 For subsequent changes, edit the schema, generate a descriptively named migration, review SQL and data/backfill/locking implications, and preserve the journal/snapshots with the SQL. Apply only reviewed migrations through an explicitly authorized, credential-safe runner over a direct connection, validate them first on the isolated Neon development branch, and record the result. Rehearse recovery and backups before any separately authorized production change. Do not edit applied migrations or use `drizzle-kit push` for synchronization.
 
-There is intentionally no committed `db:migrate`, `db:push`, startup migration, live application introspection, or automatic build/deployment migration. Task 4B.5 authorized only the recorded initial development-branch application. Future development or production changes require separate authorization; builds and application startup must never apply migrations implicitly.
+There is no general-purpose `db:migrate`, `db:push`, startup migration, live application introspection, or automatic build/deployment migration. Task 4B.5 authorized only the recorded initial development-branch application. Task 4B.9 adds the guarded production-only procedure below, but does not authorize or execute it. Future database changes still require separate authorization; builds and application startup must never apply migrations implicitly.
+
+## Production migration procedure
+
+Task 4B.9 added the operator-only production runner, and Task 4B.10 used it for the first production migration. The runner is separate from `drizzle.config.ts`, is never called by install, build, start, or deployment scripts, and accepts credentials only from ignored `.env.production-migration.local`. It does not read `.env.local`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, Vercel variables, CLI arguments, or inherited environment values. The dedicated file must be a regular non-symlink file with mode `0600` and contain exactly one entry:
+
+```dotenv
+PRODUCTION_DATABASE_URL_UNPOOLED=<direct Neon main connection URL>
+```
+
+The URL validator requires PostgreSQL over TLS, database `neondb`, a direct hostname without `-pooler`, and the exact verified production endpoint `ep-spring-grass-b7iye83x`. The known development endpoint is rejected explicitly. The exact production allowlist also rejects the recovery checkpoint and every other endpoint even though their identifiers are not needed by the runner. Connection options that could change `search_path` are rejected.
+
+The only eligible SQL is `drizzle/0000_initial_intelligence.sql`, SHA-256 `6e8821987f394954f59837b525345c03040b68f19ff339ba4810557d1a3f4a0e`, with journal tag `0000_initial_intelligence` and timestamp `1791844748241`. These values match the artifact applied and tested on development. Any byte or journal change stops the runner. The reviewed SQL contains only the six enums, four application tables, their constraints, and eight explicit indexes. It contains no `neon_auth` reference. Drizzle itself creates only `drizzle.__drizzle_migrations` for history.
+
+Use this sequence only in a later task that explicitly authorizes the production write:
+
+1. Reconfirm through authoritative Neon metadata that `main` still owns direct endpoint `ep-spring-grass-b7iye83x`, the recovery checkpoint still exists, and the production baseline remains zero `public` application tables, no Drizzle history, and nine managed authentication tables. Confirm a clean Git checkout at the reviewed commit and activate Node.js 24.
+2. Create the dedicated file without placing the URL in shell history: run `umask 077`, open `.env.production-migration.local` in a local editor, add the single variable, save it, and run `chmod 600 .env.production-migration.local`. Git's `.env*` rule ignores it, and the runner independently checks that exclusion.
+3. Run the normal offline checks, then run `npm run db:migrate:production:preflight`. This mode validates the credential, migration checksum/journal, database, empty application catalog, absent Drizzle history, safe search path, and nine-table `neon_auth` baseline inside read-only transactions. It cannot reach migration execution.
+4. Stop and review the preflight result. After separate approval to modify production, run `npm run db:migrate:production -- --execute` in an interactive terminal. The runner repeats all safeguards and requires the operator to type `APPLY INITIAL MIGRATION TO NEON MAIN ep-spring-grass-b7iye83x` exactly. A flag, piped input, CI job, or noninteractive shell cannot substitute for that confirmation.
+5. On confirmation, the runner rechecks the catalog state, pins the same acquired direct session to `public`, and invokes `drizzle-orm/neon-serverless/migrator` with the checked-in `drizzle/` folder. It explicitly sets the history target to `drizzle.__drizzle_migrations`; it never uses `drizzle-kit push` or schema synchronization.
+6. The runner then verifies the four tables, six enums, four primary keys, five unique constraints, sixteen checks, three validated restrictive foreign keys, eight explicit indexes, single matching history row, and empty application tables. It compares the `neon_auth` table/column/constraint/index catalog fingerprint before and after. Remove the dedicated credential file after the result has been reviewed.
+
+If an error occurs after the write phase starts, do not rerun automatically. Inspect the production catalog and Drizzle history against the recovery checkpoint first. Drizzle creates its history schema/table before its transactional application-DDL block, so a failed run may leave an empty history table even when application DDL rolled back. Production recovery, retry, or branch restoration requires a separate decision.
+
+### Initial production result — 2026-10-14
+
+The read-only preflight connected through the dedicated direct credential to verified production endpoint `ep-spring-grass-b7iye83x`, database `neondb`. It found the expected empty application catalog, absent Drizzle history, safe search path, and nine-table managed `neon_auth` baseline. The existing `pre-initial-migration` recovery checkpoint remained the verified recovery boundary and was not modified.
+
+After the required interactive confirmation, the runner applied only `drizzle/0000_initial_intelligence.sql` with SHA-256 `6e8821987f394954f59837b525345c03040b68f19ff339ba4810557d1a3f4a0e`. Built-in before/after comparison confirmed that the `neon_auth` table, column, constraint, and index catalog fingerprint did not change.
+
+An independent read-only catalog pass verified 4 application tables, 58 columns, 6 enums, 4 primary keys, 5 unique constraints, 16 validated checks, 3 validated foreign keys with `ON DELETE RESTRICT` and `ON UPDATE NO ACTION`, and 17 total indexes including all 8 explicit indexes. `drizzle.__drizzle_migrations` has one row matching the migration checksum and journal timestamp. All four application tables contain zero rows. The existing history timestamp means Drizzle's normal migration workflow skips this migration on a repeat run rather than recreating objects.
+
+No development or recovery branch object was changed. No test records were inserted. Production deployment builds and application startup remain migration-free, and current pages still do not connect to PostgreSQL.
 
 ## Deferred expansion and review decisions
 

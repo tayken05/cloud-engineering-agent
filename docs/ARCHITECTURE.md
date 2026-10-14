@@ -1,6 +1,6 @@
 # Architecture
 
-Status: application shell deployed; Task 4A defines the database foundation, Task 4B.4 verifies isolated Neon development connectivity, and Task 4B.5 applies and validates the initial migration on that development branch only. The application shell does not query the database, no production migration has been applied, and product workflows remain planned.
+Status: application shell deployed; Task 4A defines the database foundation, Task 4B.5 applies and validates the initial migration on development, and Task 4B.10 applies and validates the identical guarded migration on production. The application shell does not query the database, and product workflows remain planned.
 
 ## Current application
 
@@ -35,7 +35,7 @@ Status: application shell deployed; Task 4A defines the database foundation, Tas
 - No paid plan, add-on, database, AI service, or application authentication was added. The public hub remains an empty placeholder, without private information.
 - Git-based documentation/configuration updates must be committed and pushed normally, then verified against the resulting production commit. No force-push or history rewrite.
 
-## Database foundation — Tasks 4A through 4B.5
+## Database foundation — Tasks 4A through 4B.9
 
 Drizzle ORM 0.45.4, Drizzle Kit 0.31.11, and `server-only` 0.0.1 define a PostgreSQL/Neon-compatible model in `src/server/db/`. Four tables cover sources, collected source items, stories, and many-to-many story evidence. Actual foreign keys/unique/check constraints accompany typed Drizzle relationships. UUIDs, timezone-aware provenance timestamps, optional primary topics, operational/retry fields, and verification details prepare the intelligence model without implementing ingestion.
 
@@ -44,6 +44,12 @@ Drizzle ORM 0.45.4, Drizzle Kit 0.31.11, and `server-only` 0.0.1 define a Postgr
 `drizzle.config.ts` deliberately omits credentials. `db:generate` and `db:check` run offline; generated SQL, snapshot, and journal live in `drizzle/`. `.env.example` contains empty pooled `DATABASE_URL` and direct `DATABASE_URL_UNPOOLED` placeholders, with only that example exempted from environment-file exclusions. Real local values remain in ignored `.env.local`. No migration runs during startup, builds, or Vercel deployment, and no schema synchronization is configured.
 
 Task 4B.4 validated that both local URLs resolve to the expected development endpoint and `neondb`, then ran the same fixed `SELECT` in read-only transactions through pooled and direct HTTPS connections. Task 4B.5 revalidated that boundary, inspected the empty `public` schema, and used only the direct connection with Drizzle's transactional Neon serverless migrator to apply `0000_initial_intelligence.sql` to development. Catalog comparison, 13 rolled-back integration scenarios, and a repeat invocation verified the resulting schema, constraints, history, and idempotent no-op behavior. Provider-managed `neon_auth` objects were untouched, and the four application tables remain empty. These were temporary administrative verification paths, not application behavior. See `docs/DATABASE.md` for exact results and limits.
+
+Task 4B.9 adds a manual production migration boundary without adding runtime data access. A dedicated script accepts only an ignored, permission-restricted production credential file and an exact direct-endpoint allowlist. Its preflight path uses read-only transactions. Its execution path requires both an explicit `--execute` invocation and an exact interactive confirmation, pins one acquired connection to `public`, and applies only the checksum-locked migration through Drizzle's transactional PostgreSQL migrator. Install, build, start, application imports, and Vercel deployment do not call this script.
+
+The application owns the new objects in `public` and the migration record in `drizzle`; Neon owns `neon_auth`. The production runner requires the verified nine-table authentication baseline and compares authentication catalog fingerprints around migration. It contains no authentication DDL or DML. Endpoint-to-branch ownership must still be reverified through Neon metadata immediately before a future authorized execution because PostgreSQL cannot attest a Neon branch name from SQL alone.
+
+Task 4B.10 executed the initial production migration through this boundary. The resulting production catalog matches the development-tested artifact: 4 empty application tables, 58 columns, 6 enums, 4 primary keys, 5 unique constraints, 16 checks, 3 restrictive foreign keys, 17 indexes, and one matching Drizzle history row. The managed `neon_auth` catalog fingerprint remained unchanged. Runtime application access, ingestion, and authentication integration remain unimplemented.
 
 ## Planned module boundaries
 
@@ -87,7 +93,7 @@ These flows are proposals; no ingestion, AI generation, publishing, engagement, 
 
 ## Planned technology choices
 
-Neon PostgreSQL is the persistence direction; the initial schema is applied only to the isolated development branch, while production migration and runtime data access remain planned and separately gated. Drizzle schema and migration declarations are implemented. OpenAI API is the AI direction. Vercel hosts the current shell. Official X API access is conditional on feasibility. Scheduled and durable processing, Telegram Bot API, and Browser Push API remain future directions.
+Neon PostgreSQL is the persistence direction; the initial schema is applied to both the isolated development branch and production `main`, while runtime data access remains planned and separately gated. Drizzle schema and migration declarations are implemented. OpenAI API is the AI direction. Vercel hosts the current shell. Official X API access is conditional on feasibility. Scheduled and durable processing, Telegram Bot API, and Browser Push API remain future directions.
 
 ## Security and project separation
 
