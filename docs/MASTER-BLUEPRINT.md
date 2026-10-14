@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: visual shell deployed; the four-table intelligence schema is applied to Neon development and production; Task 5 adds the first server-only database read path and a curated Technology Sources Catalog. Automated collection, story processing, content, engagement, and private-data capabilities below remain planned.
+Status: visual shell deployed; the four-table intelligence schema and curated source catalog exist in Neon development and production; Task 6 adds a guarded, manually invoked six-feed collector and the database-backed Stories & News page. Automated scheduling, verified story processing, content, engagement, and private-data capabilities below remain planned.
 Recorded: 2026-10-12.
 
 ## Vision and boundaries
@@ -94,14 +94,14 @@ The publishing direction is human-reviewed and manual. Draft generation or reply
 
 ## Technology direction
 
-Implemented foundation: Node.js 24 LTS, npm and its lockfile, Next.js 16 App Router, React, strict TypeScript, Tailwind CSS, ESLint, `src/`, and the `@/*` alias. Drizzle ORM/Kit define the PostgreSQL schema and reviewed migration, which is applied and structurally validated on development and production. The Neon serverless driver supports a narrow server-only, read-only application path for the Sources Catalog; broader runtime data access remains feature-gated.
+Implemented foundation: Node.js 24 LTS, npm and its lockfile, Next.js 16 App Router, React, strict TypeScript, Tailwind CSS, ESLint, `src/`, and the `@/*` alias. Drizzle ORM/Kit define the PostgreSQL schema and reviewed migration, which is applied and structurally validated on development and production. The Neon serverless driver supports server-only Sources and Stories reads plus guarded operator ingestion; other runtime data access remains feature-gated.
 
 Integration direction and current status:
 
 | Technology | Intended future role |
 | --- | --- |
-| Neon PostgreSQL | Four-table schema on isolated development and production; initial trusted-source catalog populated in both environments |
-| Drizzle ORM | Schema/migration foundation plus the bounded server-only source-list query; future queries and migrations remain separately gated |
+| Neon PostgreSQL | Four-table schema, initial trusted-source catalog, and 110 collected publisher items on isolated development and production |
+| Drizzle ORM | Schema/migration foundation, bounded Sources/Stories reads, and guarded source-item persistence; future queries and migrations remain separately gated |
 | OpenAI API | Research assistance, draft generation, and reply suggestions |
 | Vercel | Shell hosting implemented in Task 3B; future releases require task authorization |
 | Official X API where feasible | Approved tracking and engagement capabilities |

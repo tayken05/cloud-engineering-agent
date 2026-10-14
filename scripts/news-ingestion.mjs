@@ -1,0 +1,377 @@
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import process from "node:process";
+import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
+
+import { Pool } from "@neondatabase/serverless";
+import { and, eq, inArray, or } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/neon-serverless";
+
+import { sourceItems, sources } from "../src/server/db/schema.ts";
+import { VERIFIED_FEEDS } from "../src/server/ingestion/feed-catalog.ts";
+import { collectFeeds } from "../src/server/ingestion/feed-fetcher.ts";
+import { planSourceItems } from "../src/server/ingestion/source-item-plan.ts";
+import { loadProductionCredential } from "./production-migration-guard.mjs";
+import { productionMigrationConfig } from "./production-migration.config.mjs";
+import {
+  loadDevelopmentCredential,
+  sourceCatalogConfig,
+} from "./source-catalog-guard.mjs";
+import {
+  NewsIngestionGuardError,
+  newsIngestionConfig,
+  parseNewsIngestionCommand,
+  validateFeedCatalog,
+} from "./news-ingestion-guard.mjs";
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const feedConfigs = validateFeedCatalog(VERIFIED_FEEDS);
+
+function stop(message) {
+  throw new NewsIngestionGuardError(message);
+}
+
+function assertCredentialFileIsIgnored(file) {
+  const result = spawnSync("git", ["check-ignore", "--quiet", "--", file], {
+    cwd: projectRoot,
+    stdio: "ignore",
+  });
+  if (result.status !== 0) stop(`${file} must be excluded by Git before use.`);
+}
+
+function fingerprint(value) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+async function getAuthCatalog(client) {
+  const tables = await client.query(`
+    SELECT c.relname AS table_name
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'neon_auth' AND c.relkind IN ('r', 'p')
+    ORDER BY c.relname
+  `);
+  const columns = await client.query(`
+    SELECT c.relname AS table_name, a.attnum AS column_position,
+      a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type,
+      a.attnotnull AS not_null, pg_get_expr(d.adbin, d.adrelid) AS column_default
+    FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+    LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+    WHERE n.nspname = 'neon_auth' AND c.relkind IN ('r', 'p')
+      AND a.attnum > 0 AND NOT a.attisdropped
+    ORDER BY c.relname, a.attnum
+  `);
+  const constraints = await client.query(`
+    SELECT c.relname AS table_name, con.conname AS constraint_name,
+      con.contype AS constraint_type, pg_get_constraintdef(con.oid, true) AS definition
+    FROM pg_catalog.pg_constraint con
+    JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'neon_auth'
+    ORDER BY c.relname, con.conname
+  `);
+  const indexes = await client.query(`
+    SELECT tablename AS table_name, indexname AS index_name, indexdef AS definition
+    FROM pg_catalog.pg_indexes WHERE schemaname = 'neon_auth'
+    ORDER BY tablename, indexname
+  `);
+  return Object.freeze({
+    fingerprint: fingerprint({
+      columns: columns.rows,
+      constraints: constraints.rows,
+      indexes: indexes.rows,
+      tables: tables.rows,
+    }),
+    tableCount: tables.rowCount,
+  });
+}
+
+async function getProtectedCounts(client) {
+  const result = await client.query(`
+    SELECT
+      (SELECT count(*)::integer FROM public.sources) AS sources,
+      (SELECT count(*)::integer FROM public.stories) AS stories,
+      (SELECT count(*)::integer FROM public.story_source_items) AS story_source_items
+  `);
+  return result.rows[0];
+}
+
+async function inspectDatabase(client, production) {
+  await client.query("BEGIN TRANSACTION READ ONLY");
+  try {
+    const identity = await client.query(`
+      SELECT current_database() AS database_name, current_schema() AS current_schema,
+        current_schemas(false) AS active_schemas
+    `);
+    const current = identity.rows[0];
+    if (current?.database_name !== sourceCatalogConfig.database || current?.current_schema !== "public") {
+      stop("The database identity or active application schema is unexpected.");
+    }
+    if (current.active_schemas?.includes("neon_auth")) {
+      stop("The managed authentication schema must not be in the active search path.");
+    }
+    const history = await client.query("SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id");
+    if (
+      history.rowCount !== 1 ||
+      history.rows[0]?.hash !== productionMigrationConfig.migrationSha256 ||
+      Number(history.rows[0]?.created_at) !== productionMigrationConfig.migrationTimestamp
+    ) {
+      stop("The database migration history does not match the approved initial schema.");
+    }
+    const authCatalog = await getAuthCatalog(client);
+    if (production && authCatalog.tableCount !== productionMigrationConfig.expectedAuthTableCount) {
+      stop("The production authentication catalog differs from the verified baseline.");
+    }
+    const counts = await getProtectedCounts(client);
+    await client.query("COMMIT");
+    return { authCatalog, counts };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  }
+}
+
+async function selectFeedSources(db) {
+  return db
+    .select({
+      id: sources.id,
+      isActive: sources.isActive,
+      key: sources.key,
+      primaryTopic: sources.primaryTopic,
+    })
+    .from(sources)
+    .where(inArray(sources.key, feedConfigs.map((config) => config.sourceKey)));
+}
+
+function assertFeedSources(rows) {
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  for (const config of feedConfigs) {
+    const source = byKey.get(config.sourceKey);
+    if (!source || !source.isActive || source.primaryTopic !== config.topic) {
+      stop("A configured feed does not match an active registered source and topic.");
+    }
+  }
+  if (rows.length !== feedConfigs.length) stop("The registered feed-source set is incomplete.");
+  return byKey;
+}
+
+async function selectExistingItems(transaction, sourceId, items) {
+  const externalIds = items.flatMap((item) => item.externalId ? [item.externalId] : []);
+  const urls = items.map((item) => item.canonicalUrl);
+  const identities = [inArray(sourceItems.canonicalUrl, urls)];
+  if (externalIds.length > 0) identities.push(inArray(sourceItems.externalId, externalIds));
+  return transaction
+    .select({
+      author: sourceItems.author,
+      canonicalUrl: sourceItems.canonicalUrl,
+      externalId: sourceItems.externalId,
+      id: sourceItems.id,
+      primaryTopic: sourceItems.primaryTopic,
+      publishedAt: sourceItems.publishedAt,
+      summary: sourceItems.summary,
+      title: sourceItems.title,
+    })
+    .from(sourceItems)
+    .where(and(eq(sourceItems.sourceId, sourceId), or(...identities)));
+}
+
+async function persistFeeds(db, collection, collectedAt) {
+  return db.transaction(async (transaction) => {
+    const sourceMap = assertFeedSources(await selectFeedSources(transaction));
+    let insertedCount = 0;
+    let updatedCount = 0;
+    let unchangedCount = 0;
+
+    for (const result of collection.successes) {
+      const source = sourceMap.get(result.config.sourceKey);
+      if (!source) stop("A collected feed lost its registered source mapping.");
+      const existing = await selectExistingItems(transaction, source.id, result.feed.items);
+      const plan = planSourceItems(existing, result.feed.items);
+      if (plan.inserts.length > 0) {
+        const inserted = await transaction
+          .insert(sourceItems)
+          .values(plan.inserts.map((item) => ({
+            author: item.author,
+            canonicalUrl: item.canonicalUrl,
+            collectedAt,
+            externalId: item.externalId,
+            kind: "article",
+            lastSeenAt: collectedAt,
+            originalUrl: item.originalUrl,
+            primaryTopic: item.primaryTopic,
+            publishedAt: item.publishedAt,
+            sourceId: source.id,
+            summary: item.summary,
+            title: item.title,
+          })))
+          .onConflictDoNothing()
+          .returning({ id: sourceItems.id });
+        insertedCount += inserted.length;
+      }
+      for (const update of plan.updates) {
+        await transaction
+          .update(sourceItems)
+          .set({
+            ...(update.changed ? {
+              author: update.item.author,
+              externalId: update.item.externalId ?? update.existing.externalId,
+              primaryTopic: update.item.primaryTopic,
+              publishedAt: update.item.publishedAt,
+              summary: update.item.summary,
+              title: update.item.title,
+              updatedAt: collectedAt,
+            } : {}),
+            lastSeenAt: collectedAt,
+          })
+          .where(eq(sourceItems.id, update.existing.id));
+        if (update.changed) updatedCount += 1;
+        else unchangedCount += 1;
+      }
+      const finalRows = await selectExistingItems(transaction, source.id, result.feed.items);
+      const finalPlan = planSourceItems(finalRows, result.feed.items);
+      if (finalPlan.inserts.length !== 0 || finalRows.length !== result.feed.items.length) {
+        stop("The source-item batch did not reach its approved idempotent state.");
+      }
+      await transaction
+        .update(sources)
+        .set({ lastCollectedAt: collectedAt, updatedAt: collectedAt })
+        .where(eq(sources.id, source.id));
+    }
+    return Object.freeze({ insertedCount, unchangedCount, updatedCount });
+  });
+}
+
+async function verifyStoredItems(client, sourceKeys) {
+  const result = await client.query(`
+    SELECT s.key, count(si.id)::integer AS item_count
+    FROM public.sources s
+    LEFT JOIN public.source_items si ON si.source_id = s.id
+    WHERE s.key = ANY($1::text[])
+    GROUP BY s.key
+    ORDER BY s.key
+  `, [sourceKeys]);
+  const duplicates = await client.query(`
+    SELECT count(*)::integer AS duplicate_groups FROM (
+      SELECT source_id, external_id FROM public.source_items
+      WHERE external_id IS NOT NULL GROUP BY source_id, external_id HAVING count(*) > 1
+      UNION ALL
+      SELECT source_id, canonical_url FROM public.source_items
+      GROUP BY source_id, canonical_url HAVING count(*) > 1
+    ) duplicate_identities
+  `);
+  if (Number(duplicates.rows[0]?.duplicate_groups) !== 0) {
+    stop("Duplicate source-item identities were detected after ingestion.");
+  }
+  return result.rows;
+}
+
+async function confirmProduction() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    stop("Production news ingestion requires an interactive terminal.");
+  }
+  const readline = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await readline.question(`Type exactly: ${newsIngestionConfig.productionConfirmation}\n> `);
+    if (answer !== newsIngestionConfig.productionConfirmation) {
+      stop("Production news ingestion confirmation did not match.");
+    }
+  } finally {
+    readline.close();
+  }
+}
+
+async function main() {
+  const command = parseNewsIngestionCommand(process.argv.slice(2));
+  const production = command.environment === "production";
+  const credentialFile = production
+    ? productionMigrationConfig.credentialFile
+    : sourceCatalogConfig.developmentCredentialFile;
+  assertCredentialFileIsIgnored(credentialFile);
+  const credential = production
+    ? await loadProductionCredential(projectRoot)
+    : await loadDevelopmentCredential(projectRoot);
+  const expectedEndpoint = production
+    ? sourceCatalogConfig.productionEndpoint
+    : sourceCatalogConfig.developmentEndpoint;
+  if (credential.endpoint !== expectedEndpoint || credential.database !== sourceCatalogConfig.database) {
+    stop("The credential does not match the selected approved environment.");
+  }
+
+  const collection = await collectFeeds(feedConfigs);
+  for (const failure of collection.failures) {
+    console.warn(`Feed unavailable (${failure.sourceKey}): ${failure.reason}`);
+  }
+  if (collection.successes.length < newsIngestionConfig.minimumSuccessfulFeeds) {
+    stop("Too few approved feeds completed safely; no database write is allowed.");
+  }
+  const itemCount = collection.successes.reduce((total, result) => total + result.feed.items.length, 0);
+  console.log(`Feed validation passed: ${collection.successes.length} publishers and ${itemCount} bounded items.`);
+
+  const pool = new Pool({
+    connectionString: credential.connectionString,
+    connectionTimeoutMillis: 15_000,
+    max: 1,
+  });
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query("SET statement_timeout = '20s'");
+    await client.query("SET lock_timeout = '5s'");
+    const db = drizzle(client);
+    assertFeedSources(await selectFeedSources(db));
+    await inspectDatabase(client, production);
+    const existingItems = await verifyStoredItems(
+      client,
+      feedConfigs.map((config) => config.sourceKey),
+    );
+    const existingItemCount = existingItems.reduce(
+      (total, row) => total + Number(row.item_count),
+      0,
+    );
+    console.log(`${command.environment} preflight passed: endpoint, database, migration, sources, and authentication boundary.`);
+    console.log(`Existing stored items across configured publishers: ${existingItemCount}; duplicate identity groups: 0.`);
+    console.log(existingItems.map((row) => `${row.key}=${row.item_count}`).join(", "));
+    if (command.mode === "preflight") return;
+
+    if (production) await confirmProduction();
+    const repeated = await inspectDatabase(client, production);
+    const result = await persistFeeds(db, collection, new Date());
+    const after = await inspectDatabase(client, production);
+    if (
+      repeated.counts.sources !== after.counts.sources ||
+      repeated.counts.stories !== after.counts.stories ||
+      repeated.counts.story_source_items !== after.counts.story_source_items
+    ) {
+      stop("A protected application table count changed unexpectedly.");
+    }
+    if (repeated.authCatalog.fingerprint !== after.authCatalog.fingerprint) {
+      stop("The managed authentication catalog changed unexpectedly.");
+    }
+    const stored = await verifyStoredItems(
+      client,
+      collection.successes.map((result) => result.config.sourceKey),
+    );
+    const totalStored = stored.reduce((total, row) => total + Number(row.item_count), 0);
+    console.log(
+      `News ingestion succeeded: ${result.insertedCount} inserted, ${result.updatedCount} updated, ${result.unchangedCount} seen unchanged.`,
+    );
+    console.log(`Verified stored items across connected publishers: ${totalStored}.`);
+    console.log("Stories, evidence links, source count, and the managed authentication catalog were unchanged.");
+  } finally {
+    client?.release();
+    await pool.end().catch(() => undefined);
+  }
+}
+
+main().catch((error) => {
+  if (error instanceof NewsIngestionGuardError) {
+    console.error(`News ingestion stopped: ${error.message}`);
+  } else {
+    console.error("News ingestion failed without exposing provider or database diagnostics.");
+  }
+  process.exitCode = 1;
+});

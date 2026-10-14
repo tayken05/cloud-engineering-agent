@@ -1,6 +1,6 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the same checksum-locked migration to development and production. Task 5 adds one bounded runtime query path: the public Sources Catalog reads approved metadata from `sources`. No other table has an application query path, and no ingestion or public write interface exists.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the same checksum-locked migration to development and production. Task 5 adds the Sources read path. Task 6 adds guarded `source_items` ingestion and a bounded public Stories read path. No public write interface exists.
 
 ## Dependencies and boundaries
 
@@ -50,14 +50,14 @@ Verification notes/timestamps do **not** prove factual accuracy. Cross-table che
 
 ## Deduplication and safe repeated ingestion
 
-This task implements identity constraints, not an ingestion engine or canonicalization algorithm.
+Task 6 implements the first bounded identity and canonicalization policy:
 
 1. Preserve the discovered original URL; derive a canonical URL using a documented, source-aware normalization policy. Normalize scheme/host/default ports and remove fragments where appropriate. Do not blindly drop all query parameters or lowercase URL paths. The database compares stored canonical strings exactly.
 2. Prefer a stable provider external ID when present, with the source-scoped canonical URL as an additional guard. Repeated collection must resolve conflicts without overwriting source identity, first collection time, or publication provenance. If the external ID and URL resolve to different existing rows, stop/quarantine the conflict rather than merge silently.
-3. In a future transaction, upsert against reviewed identity rules, update last-seen/operational metadata, and advance the source cursor only after successful persistence. Unique constraints protect concurrent insert races; caller conflict handling is still required.
+3. The operator transaction inserts missing items, advances last-seen time, and updates changed publisher metadata while preserving first collection and original URL. It does not advance a cursor because these initial feeds provide no reviewed cursor contract. Unique constraints protect concurrent insert races, and a final identity pass verifies the batch.
 4. Store a stable story grouping key assigned by a reviewed deterministic policy. Titles are not unique and are not a sufficient semantic deduplication key. Exact story-key uniqueness prevents repeated creation; similarity-based story discovery remains planned.
 5. Link evidence idempotently using the composite key. Preserve separate source attribution across publishers; content hashes and canonical URLs can flag possible syndication, not establish independence or verification.
-6. Future workers need bounded retries/backoff, idempotent writes, controlled concurrency, timeouts/cancellation, atomic cursor advancement, and sanitized errors without credentials or response bodies. Changing evidence content must trigger a verification review; versioned snapshots are not implemented yet.
+6. Fetching now uses bounded concurrency, timeouts/cancellation, response limits, idempotent writes, and sanitized errors. Durable retries/backoff, run history, atomic cursor advancement, versioned content snapshots, and verification-review invalidation remain future work.
 
 ## Technology Sources Catalog — Task 5
 
@@ -67,11 +67,23 @@ Eleven first-party sources are registered in both Neon `development` and product
 
 `scripts/source-catalog-seed.mjs` is operator-only tooling, not an application endpoint or build hook. Development requires the exact direct development endpoint from ignored `.env.local`. Production reuses the dedicated ignored `0600` production migration credential, exact direct production endpoint allowlist, and a source-specific interactive confirmation. Both modes verify the applied migration and catalog conflicts before writes. Registration is insert-only with `ON CONFLICT DO NOTHING`; exact repeats insert zero rows, while conflicting keys or canonical URLs stop the transaction. The script fingerprints `neon_auth` and verifies non-source application table counts around writes. It never migrates schemas, exposes credentials, or creates public write APIs.
 
+## Technology news collection — Task 6
+
+The collector uses six reviewed feeds mapped to existing sources: AWS Architecture, Google Cloud, Cloudflare, Kubernetes, CNCF, and HashiCorp. Feed endpoints remain typed server configuration because the current schema intentionally has no feed URL field. Linux Kernel Archives remains registered but inactive for collection: `kdist.xml` is valid and official, but its entries share the same homepage link, so ingesting them would violate the source-scoped canonical URL uniqueness rule.
+
+Each successful feed contributes at most 20 items. The collector stores only title, bounded plain-text summary, optional author, provider external ID, approved original/canonical URL, topic, article kind, source attribution, publication time, collection time, and last-seen time. It leaves verification status at `unverified`, creates no story or evidence row, stores no full article body, and does not infer reliability. URL fragments are removed; paths and query parameters otherwise remain publisher-controlled and case-preserving.
+
+Before a write, both external-ID and canonical-URL matches are resolved. If they point to different rows, or an established identity changes URL/ID incompatibly, the transaction stops. Repeats update last-seen time and only change mutable publisher metadata when necessary. The first successful run stored 110 items in development and 110 in production; the second development run inserted zero, updated zero, and recognized all 110. Six source `last_collected_at` values record successful batch completion. `stories` and `story_source_items` remain empty.
+
+`scripts/news-ingestion.mjs` loads only ignored, permission-restricted direct credentials, validates the exact selected endpoint/database and migration history, requires at least four successful reviewed feeds, and fingerprints managed authentication objects across production writes. Production requires `--execute` and `INGEST APPROVED NEWS INTO NEON MAIN ep-spring-grass-b7iye83x` in a TTY. The command is absent from install/build/start/Vercel configuration and never runs a migration. Failed database writes are transactional; the initial development timestamp-constraint failure rolled back completely before the shared collection/last-seen timestamp was corrected and the operation retried.
+
+`src/server/news/list-news.ts` joins `source_items` to `sources`, validates filters, orders by publication time with collection fallback, and caps output at 100. `/stories` calls `connection()` before the uncached query, so builds remain credential-free. Errors become a fixed public state without provider diagnostics. There is no browser database client, public write endpoint, ingestion Server Action, schedule, or Cron job.
+
 ## Environment configuration
 
 `DATABASE_URL` is the pooled server-only Neon URL intended for future application queries. `DATABASE_URL_UNPOOLED` is the direct server-only URL reserved for separately authorized migration or session-level work. `.env.example` contains empty placeholders only; no live URL is necessary for generation, offline tests, type checking, or builds. Actual `.env*` files remain ignored, with a narrow exception for `.env.example`. Never use `NEXT_PUBLIC_*` database variables or include credentials in configuration files, errors, migration files, logs, or client bundles.
 
-The local `.env.local` contains both development connection settings and remains ignored and untracked. The URLs match the expected development endpoint and `neondb`. Task 5 uses pooled `DATABASE_URL` for local application reads and the direct value only in guarded administrative source registration. Neither value is copied to source files or documentation.
+The local `.env.local` contains both development connection settings and remains ignored and untracked. The URLs match the expected development endpoint and `neondb`. Runtime Sources/Stories reads use pooled `DATABASE_URL`; guarded administrative registration and ingestion use the direct value. Production administration reuses only the dedicated production credential file. No value is copied to source files or documentation.
 
 ## Migration workflow
 
@@ -135,13 +147,13 @@ No development or recovery branch object was changed. No test records were inser
 
 ## Deferred expansion and review decisions
 
-Review the source-scoped identity rules, canonical-URL byte bound, 0–100 reliability/priority scales, deterministic story grouping policy, primary-topic taxonomy, and evidence-retention rules before ingestion implementation. These are proposed foundation conventions rather than a completed verification product.
+Review the source-scoped identity rules and canonicalization policy before adding publishers whose feeds use mutable or nonunique links. Reliability/priority scales, deterministic story grouping, the primary-topic taxonomy, evidence retention, and verification audit history still require review before those features expand. The collected feed is not a completed verification product.
 
 Future tasks may add access control and personal preferences, feeds, bookmarks, digests, content drafts/memory, independent teaching categories, immutable provenance/review history, source fetch runs, and durable jobs. Add those tables only when their behavior is authorized. Data access and private hub information must remain server-side, with authorization before any private data is exposed through the currently public shell.
 
 ## Current tooling limitations
 
-The production-only audit reports zero vulnerabilities. Full audit has nine development package findings: five existing high findings from braces and four moderate findings through Drizzle Kit's legacy loader to esbuild 0.18.20. The latter advisory affects esbuild's HTTP serve feature, not offline schema generation; no serve/Studio command is used. Patched esbuild 0.25.0 is outside the legacy loader's declared `~0.18.20` range. Track a compatible upstream stable fix, without forced Kit downgrades or unsupported overrides.
+The production-only audit reports zero vulnerabilities, including current stable `fast-xml-parser` 5.11.2. Full audit has nine development package findings: five existing high findings from braces and four moderate findings through Drizzle Kit's legacy loader to esbuild 0.18.20. The latter advisory affects esbuild's HTTP serve feature, not offline schema generation; no serve/Studio command is used. Patched esbuild 0.25.0 is outside the legacy loader's declared `~0.18.20` range. Track a compatible upstream stable fix, without forced Kit downgrades or unsupported overrides.
 
 npm reported deprecated esbuild-kit loader packages and blocked three esbuild postinstall scripts. Generation/checks succeeded using installed native binaries; no extra script approval was needed. The built-in tests report Node's module-type detection warning for `.ts` ES-module imports in the existing mixed-module project. That warning remains visible; schema/application compilation is unchanged.
 

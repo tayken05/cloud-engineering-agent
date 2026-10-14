@@ -74,15 +74,24 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 
 ## Task 5: Technology Sources Catalog — implemented
 
-- Added the first server-only runtime database query using Drizzle and Neon HTTP, with lazy configuration, an eight-second timeout, a 100-row limit, safe errors, and request-time uncached rendering.
+- Added the first server-only runtime database query using Drizzle and Neon HTTP, with lazy configuration, a bounded timeout, a 100-row limit, safe errors, and request-time uncached rendering. Task 6 set the shared timeout to 15 seconds after a cold-start regression reached the original eight-second limit.
 - Replaced the Sources placeholder with a responsive catalog, accessible search and topic/type/status filters, official links, enabled state, honest empty/error states, and a clear verification limitation.
 - Registered 11 reviewed first-party technology sources in development and production through guarded direct-connection tooling. A repeated development execution inserted zero rows; production postflight found all 11 exact records and zero pending inserts.
 - Kept writes out of the public application. No API route, Server Action, schema migration, ingestion job, source reliability score, freshness metric, article, or authentication behavior was added.
 - Verification covers catalog identities/category scope, filter validation, wrong-endpoint guards, conflict detection, idempotent planning, development and production pre/postflight, HTTP filters/empty state, safe database-failure rendering, route regressions, lint, strict types, production build, database tests, and dependency audits.
 
+## Task 6: Technology news collection engine — implemented
+
+- Connected six reviewed first-party RSS/Atom feeds for AWS Architecture, Google Cloud, Cloudflare, Kubernetes, CNCF, and HashiCorp. The Linux kernel release feed remains registered but inactive because its entries do not provide unique article URLs compatible with the current identity constraint.
+- Added bounded HTTPS fetching with exact host/redirect allowlists, 15-second cancellation, 2 MiB response limits, 20-item feed batches, concurrency two, XML/entity protections, plain-text normalization, and per-publisher failure isolation.
+- Added conflict-safe transactional persistence to `source_items`, preserving source IDs, original links, provider identifiers, publication/collection/last-seen times, and unverified status. Initial development and production runs each stored 110 genuine publisher items; the development repeat inserted zero duplicates.
+- Replaced the Stories placeholder with an uncached server-rendered news list, category/publisher filters, newest-first ordering, original links, responsive empty/error states, and explicit publisher-metadata/not-independently-verified language.
+- Kept all writes in exact-endpoint guarded operator tooling. Production required the dedicated ignored credential and interactive phrase. No public write endpoint, schema migration, `neon_auth` change, story/evidence creation, Cron job, or automated schedule was added.
+- Verification covers RSS/Atom parsing, malformed/entity input, allowlists, size/content-type limits, failure isolation, deduplication/conflict planning, live development repeatability, production postflight, HTTP filters/empty state/secret absence, route regressions, lint, strict types, database checks, Webpack production build, and dependency audits.
+
 ## Planned phase: Expanded verified intelligence
 
-When separately authorized, expand the narrow Sources read path into ingestion behavior. Implement item canonicalization, conflict-safe upserts, transactional cursor advancement, evidence review/corrections, and durable ingestion with retries, idempotency, timeouts, and controlled concurrency. The populated source registry does not collect articles or verify future publisher claims.
+When separately authorized, add durable collection runs, retries/backoff, scheduling, observability, source freshness, and cursor policies. Design deterministic story grouping and evidence review/corrections without treating publisher provenance as independent verification. The current collector stores bounded metadata only and is manually invoked.
 
 ## Planned phase: Personal Tech Intelligence Hub
 

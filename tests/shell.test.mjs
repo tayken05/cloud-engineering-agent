@@ -7,7 +7,7 @@ const routes = [
   ["/", "Your engineering workspace", "Coming in a future phase"],
   ["/tech-hub", "My Tech Intelligence", "Coming in a future phase"],
   ["/trending", "Trending", "Coming in a future phase"],
-  ["/stories", "Stories &amp; News", "Coming in a future phase"],
+  ["/stories", "Stories &amp; News", "Collected publisher updates"],
   ["/ideas", "Content Ideas", "Coming in a future phase"],
   ["/studio", "Content Studio", "Coming in a future phase"],
   ["/learning-series", "Learning Series", "Coming in a future phase"],

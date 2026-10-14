@@ -17,7 +17,7 @@ export function FeaturePage({ path }: { path: WorkspacePath }) {
       </section>
       <div className="scope-note">
         <strong>Workspace preview</strong>
-        <p>This page provides navigation and a place for future features. No connected services or live data are available.</p>
+        <p>This page provides navigation and a place for future features. Its workflow is not connected and it displays no live data.</p>
       </div>
     </PageLayout>
   );

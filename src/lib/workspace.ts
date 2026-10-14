@@ -27,9 +27,9 @@ export const sections = [
     href: "/stories",
     title: "Stories & News",
     group: "Intelligence",
-    description: "Follow technical stories with evidence and context.",
+    description: "Review recent first-party technology updates with their original attribution.",
     empty: "No stories collected yet",
-    detail: "Future stories will include original links, timestamps, verification status, and duplicate detection. No news sources are connected."
+    detail: "Publisher updates include original links, publication and collection timestamps, and source-scoped duplicate detection. Independently verified story grouping remains planned."
   },
   {
     href: "/ideas",
@@ -85,7 +85,7 @@ export const sections = [
     group: "Manage",
     description: "Establish the trusted foundations of your research.",
     empty: "Trusted technology source catalog",
-    detail: "The catalog lists registered first-party sources and their official links. Automated ingestion, freshness tracking, and source administration are not active."
+    detail: "The catalog lists registered first-party sources and their official links. Feed collection is controlled by operator-only tooling; authenticated source administration is planned."
   },
   {
     href: "/settings",

@@ -20,8 +20,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="sidebar-footer">
           <span className="status-dot" aria-hidden="true" />
           <span>
-            Foundation phase
-            <span className="footer-detail">Integrations not connected</span>
+            Intelligence foundation
+            <span className="footer-detail">Manual collection active</span>
           </span>
         </div>
       </aside>

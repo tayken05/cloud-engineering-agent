@@ -1,6 +1,6 @@
 # Architecture
 
-Status: application shell deployed; the initial database migration is validated on development and production; Task 5 implements the first database-backed feature, the read-only Technology Sources Catalog. Ingestion and the remaining product workflows remain planned.
+Status: application shell deployed; the initial database migration is validated on development and production; the Technology Sources Catalog and first bounded news collector are live. Automated scheduling, story grouping/verification, and the remaining product workflows remain planned.
 
 ## Current application
 
@@ -11,7 +11,7 @@ Status: application shell deployed; the initial database migration is validated 
 - `@/*` resolves to `src/*`.
 - Root configuration contains Next.js, TypeScript, and ESLint settings.
 - `docs/` contains product requirements, roadmap, architecture, and decisions. Root `AGENTS.md` governs coding-agent work.
-- The dashboard is a static introduction to the four pillars. The `/sources` route lists approved public source metadata from PostgreSQL; the other ten feature routes remain descriptive empty states. Automated research, content, engagement, private-data workflows, authentication, and jobs remain planned.
+- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata and `/stories` lists collected publisher updates from PostgreSQL; the other ten feature routes remain descriptive empty states. Automated scheduling, verified story creation, content, engagement, private-data workflows, authentication, and jobs remain planned.
 
 ## Implemented application shell
 
@@ -39,7 +39,7 @@ Status: application shell deployed; the initial database migration is validated 
 
 Drizzle ORM 0.45.4, Drizzle Kit 0.31.11, and `server-only` 0.0.1 define a PostgreSQL/Neon-compatible model in `src/server/db/`. Four tables cover sources, collected source items, stories, and many-to-many story evidence. Actual foreign keys/unique/check constraints accompany typed Drizzle relationships. UUIDs, timezone-aware provenance timestamps, optional primary topics, operational/retry fields, and verification details prepare the intelligence model without implementing ingestion.
 
-`src/server/db/index.ts` remains the server-only database boundary. The raw schema stays pure for migration tooling, and the lazy environment reader validates `DATABASE_URL` only when called. `src/server/db/client.ts` creates a Neon HTTP/Drizzle client per requested operation with an eight-second abort signal; it creates no module-initialization connection. Only the Sources Server Component reaches the query layer, and no database module is imported by Client Components.
+`src/server/db/index.ts` remains the server-only database boundary. The raw schema stays pure for migration tooling, and the lazy environment reader validates `DATABASE_URL` only when called. `src/server/db/client.ts` creates a Neon HTTP/Drizzle client per requested operation with a 15-second abort signal; it creates no module-initialization connection. The Sources and Stories Server Components reach narrow query modules, and no database module is imported by Client Components.
 
 `drizzle.config.ts` deliberately omits credentials. `db:generate` and `db:check` run offline; generated SQL, snapshot, and journal live in `drizzle/`. `.env.example` contains empty pooled `DATABASE_URL` and direct `DATABASE_URL_UNPOOLED` placeholders, with only that example exempted from environment-file exclusions. Real local values remain in ignored `.env.local`. No migration runs during startup, builds, or Vercel deployment, and no schema synchronization is configured.
 
@@ -49,7 +49,7 @@ Task 4B.9 adds a manual production migration boundary without adding runtime dat
 
 The application owns the new objects in `public` and the migration record in `drizzle`; Neon owns `neon_auth`. The production runner requires the verified nine-table authentication baseline and compares authentication catalog fingerprints around migration. It contains no authentication DDL or DML. Endpoint-to-branch ownership must still be reverified through Neon metadata immediately before a future authorized execution because PostgreSQL cannot attest a Neon branch name from SQL alone.
 
-Task 4B.10 executed the initial production migration through this boundary. The resulting schema matches the development-tested artifact: 4 application tables, 58 columns, 6 enums, 4 primary keys, 5 unique constraints, 16 checks, 3 restrictive foreign keys, 17 indexes, and one matching Drizzle history row. Task 5 subsequently inserted the approved 11-row source catalog in both environments. The other three application tables remain empty, the managed `neon_auth` catalog is unchanged, and ingestion and authentication integration remain unimplemented.
+Task 4B.10 executed the initial production migration through this boundary. The resulting schema matches the development-tested artifact: 4 application tables, 58 columns, 6 enums, 4 primary keys, 5 unique constraints, 16 checks, 3 restrictive foreign keys, 17 indexes, and one matching Drizzle history row. Task 5 inserted the approved 11-row source catalog in both environments. Task 6 inserted 110 collected items from six reviewed feeds into each environment; `stories` and `story_source_items` remain empty, and the managed `neon_auth` catalog is unchanged.
 
 ## Technology Sources Catalog — Task 5
 
@@ -59,6 +59,16 @@ Task 4B.10 executed the initial production migration through this boundary. The 
 - The first version deliberately does not cache results. Each incoming request reads the current catalog; this behavior is documented in code and database documentation.
 - Catalog population remains separate administrative tooling. Exact development and production direct-endpoint allowlists, migration-history checks, conflict detection, insert-only transactions, and production interactive confirmation protect the operation. No route, Server Action, or API handler can write sources.
 - Eleven registered first-party sources cover AWS, Azure, Google Cloud, Linux, networking, Kubernetes/cloud native, DevOps, infrastructure as code, cybersecurity, software engineering, and AI infrastructure. Registration identifies provenance; it does not verify every item a publisher may publish.
+
+## Technology news collection — Task 6
+
+- Six static first-party feed definitions connect AWS Architecture, Google Cloud, Cloudflare, Kubernetes, CNCF, and HashiCorp to their registered source keys. Feed URLs are configuration, not database columns or user input. The valid Linux kernel distribution feed remains inactive because its entries share one homepage URL and therefore cannot satisfy the approved canonical-URL identity constraint without inventing URLs.
+- `src/server/ingestion/` separates reviewed configuration, bounded fetching, XML normalization, and identity planning. Fetches accept HTTPS only, enforce exact host allowlists across at most two redirects, reject IP literals and XML declarations/entities, allow only XML feed content types, stop after 15 seconds or 2 MiB, cap each feed at 20 entries, and use concurrency two. One failed publisher does not discard other successful fetches.
+- `fast-xml-parser` 5.11.2 parses RSS and Atom with entity processing disabled after XML validation and explicit DOCTYPE/ENTITY rejection. Normalization strips markup to plain text, bounds stored summaries to 700 characters, accepts only approved article hosts, removes URL fragments, preserves provider IDs and original links, and keeps publication time separate from collection time.
+- `scripts/news-ingestion.mjs` is operator-only. Development and production require their exact direct endpoint allowlists, the applied migration, registered active sources, and a safe authentication boundary. Production additionally requires the dedicated ignored `0600` credential and an exact interactive phrase. Writes are transactional, source-scoped, conflict-aware, and limited to `source_items` plus `sources.last_collected_at`/`updated_at`. No migration, story creation, evidence link, or `neon_auth` operation occurs.
+- Repeated items resolve by both external ID and canonical URL. Split identities stop rather than merge silently; first collection and original URL remain stable; last-seen time advances; changed publisher metadata updates in place. Database uniqueness remains the concurrency backstop. Development repeat verification inserted zero duplicates after the initial 110 records.
+- `/stories` is an uncached, request-rendered Server Component. Its server-only Drizzle query returns at most 100 newest items, with validated category/publisher filters and fixed safe errors. React renders stored plain text through normal escaping. The interface labels every entry as collected publisher metadata that is not independently verified.
+- There is no public ingestion handler, Server Action, API endpoint, scheduler, or Vercel Cron. A future durable worker must add retries/backoff and run history before scheduling is enabled.
 
 ## Planned module boundaries
 
@@ -90,7 +100,7 @@ Engagement: authorized X data where feasible → conversation hubs and Shared In
 
 Notifications: authorized application event → durable notification job → preference and consent checks → Telegram or Browser Push delivery → observable delivery result.
 
-These flows are proposals; no ingestion, AI generation, publishing, engagement, or notification flow exists in Task 1.
+Only the first bounded, manually invoked collection step exists. Evidence grouping/verification, AI generation, publishing, engagement, and notification flows remain proposals.
 
 ## Reliability and provenance
 
@@ -102,7 +112,7 @@ These flows are proposals; no ingestion, AI generation, publishing, engagement, 
 
 ## Planned technology choices
 
-Neon PostgreSQL stores the applied schema and initial source catalog on both isolated development and production `main`. Drizzle implements schema, migrations, and the single bounded source read query. Additional runtime access remains separately gated. OpenAI API is the AI direction. Vercel hosts the application. Official X API access is conditional on feasibility. Scheduled and durable processing, Telegram Bot API, and Browser Push API remain future directions.
+Neon PostgreSQL stores the applied schema, source catalog, and collected publisher metadata on both isolated development and production `main`. Drizzle implements schema, migrations, and bounded Sources/Stories reads. The collector remains operator-invoked. OpenAI API is the AI direction. Vercel hosts the application. Official X API access is conditional on feasibility. Scheduled and durable processing, Telegram Bot API, and Browser Push API remain future directions.
 
 ## Security and project separation
 

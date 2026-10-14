@@ -6,7 +6,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { getDatabaseUrl } from "./environment";
 import * as schema from "./schema";
 
-export const DATABASE_QUERY_TIMEOUT_MS = 8_000;
+export const DATABASE_QUERY_TIMEOUT_MS = 15_000;
 
 type DatabaseOptions = Readonly<{
   signal?: AbortSignal;
