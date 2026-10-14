@@ -73,19 +73,53 @@ export class CollectionLeaseLostError extends Error {
   }
 }
 
-function assertRuntimeDatabaseUrl(value: string, expectedEndpoint?: string): string {
-  const url = new URL(value);
+export type CollectionDatabaseMode = "direct" | "pooled";
+
+export function validateCollectionDatabaseUrl(
+  value: string,
+  options: Readonly<{
+    expectedEndpoint?: string;
+    mode: CollectionDatabaseMode;
+  }>,
+): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Collection requires a valid database connection URL.");
+  }
+  if (
+    !new Set(["postgres:", "postgresql:"]).has(url.protocol) ||
+    !url.username ||
+    !url.password ||
+    !url.hostname.endsWith(".neon.tech") ||
+    (url.port && url.port !== "5432") ||
+    url.hash ||
+    url.searchParams.has("options")
+  ) {
+    throw new Error("Collection requires an approved Neon PostgreSQL connection.");
+  }
+  const sslModes = url.searchParams.getAll("sslmode");
+  if (sslModes.length !== 1 || !new Set(["require", "verify-full"]).has(sslModes[0])) {
+    throw new Error("Collection requires TLS for the database connection.");
+  }
   const hostLabel = url.hostname.split(".")[0]?.toLowerCase();
-  if (!hostLabel?.endsWith("-pooler")) {
-    throw new Error("Scheduled collection requires a pooled Neon database connection.");
+  const pooled = hostLabel?.endsWith("-pooler") ?? false;
+  if ((options.mode === "pooled") !== pooled) {
+    throw new Error(`Collection requires a ${options.mode} Neon database connection.`);
   }
-  const endpoint = hostLabel.slice(0, -"-pooler".length);
-  if (expectedEndpoint && endpoint !== expectedEndpoint) {
-    throw new Error("Scheduled collection refused an unexpected database endpoint.");
+  const endpoint = pooled ? hostLabel?.slice(0, -"-pooler".length) : hostLabel;
+  if (options.expectedEndpoint && endpoint !== options.expectedEndpoint) {
+    throw new Error("Collection refused an unexpected database endpoint.");
   }
-  const database = decodeURIComponent(url.pathname.slice(1));
+  let database: string;
+  try {
+    database = decodeURIComponent(url.pathname.slice(1));
+  } catch {
+    throw new Error("Collection requires the expected database.");
+  }
   if (database !== "neondb") {
-    throw new Error("Scheduled collection requires the expected database.");
+    throw new Error("Collection requires the expected database.");
   }
   return value;
 }
@@ -272,11 +306,18 @@ class PostgresCollectionRunStore implements CollectionRunStore {
 }
 
 export async function createCollectionRunStore(
-  options: Readonly<{ expectedEndpoint?: string }> = {},
+  options: Readonly<{
+    connectionString?: string;
+    expectedEndpoint?: string;
+    mode?: CollectionDatabaseMode;
+  }> = {},
 ): Promise<CollectionRunStore> {
-  const connectionString = assertRuntimeDatabaseUrl(
-    getDatabaseUrl(),
-    options.expectedEndpoint,
+  const connectionString = validateCollectionDatabaseUrl(
+    options.connectionString ?? getDatabaseUrl(),
+    {
+      expectedEndpoint: options.expectedEndpoint,
+      mode: options.mode ?? "pooled",
+    },
   );
   const pool = new Pool({
     connectionString,

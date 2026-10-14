@@ -96,4 +96,12 @@ export const TRUSTED_SOURCE_CATALOG = [
     primaryTopic: "ai_infrastructure",
     description: "NVIDIA technical articles about accelerated computing, AI engineering, inference, and data-center infrastructure.",
   },
+  {
+    key: "cisco-security-advisories",
+    name: "Cisco Security Advisories",
+    canonicalUrl: "https://sec.cloudapps.cisco.com/security/center/publicationListing.x",
+    kind: "official_feed",
+    primaryTopic: "cybersecurity",
+    description: "Official Cisco PSIRT advisories for vulnerabilities affecting Cisco products and networks.",
+  },
 ] as const satisfies readonly TrustedSourceCatalogEntry[];

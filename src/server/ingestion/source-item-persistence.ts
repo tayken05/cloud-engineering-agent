@@ -130,24 +130,31 @@ export async function persistCollectedFeeds(
           .returning({ id: sourceItems.id });
         insertedCount += inserted.length;
       }
-      for (const update of plan.updates) {
+      const unchangedIds = plan.updates
+        .filter((update) => !update.changed)
+        .map((update) => update.existing.id);
+      if (unchangedIds.length > 0) {
+        await transaction
+          .update(sourceItems)
+          .set({ lastSeenAt: collectedAt })
+          .where(inArray(sourceItems.id, unchangedIds));
+        unchangedCount += unchangedIds.length;
+      }
+      for (const update of plan.updates.filter((candidate) => candidate.changed)) {
         await transaction
           .update(sourceItems)
           .set({
-            ...(update.changed ? {
-              author: update.item.author,
-              externalId: update.item.externalId ?? update.existing.externalId,
-              primaryTopic: update.item.primaryTopic,
-              publishedAt: update.item.publishedAt,
-              summary: update.item.summary,
-              title: update.item.title,
-              updatedAt: collectedAt,
-            } : {}),
+            author: update.item.author,
+            externalId: update.item.externalId ?? update.existing.externalId,
             lastSeenAt: collectedAt,
+            primaryTopic: update.item.primaryTopic,
+            publishedAt: update.item.publishedAt,
+            summary: update.item.summary,
+            title: update.item.title,
+            updatedAt: collectedAt,
           })
           .where(eq(sourceItems.id, update.existing.id));
-        if (update.changed) updatedCount += 1;
-        else unchangedCount += 1;
+        updatedCount += 1;
       }
       const finalRows = await selectExistingItems(transaction, source.id, result.feed.items);
       const finalPlan = planSourceItems(finalRows, result.feed.items);

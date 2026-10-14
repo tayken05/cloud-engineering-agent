@@ -61,6 +61,45 @@ test("malformed XML, declarations, and off-allowlist links fail safely", () => {
   assert.equal(toPlainText("<img src=x onerror=bad()>hello", 100), "hello");
 });
 
+test("HTML declarations inside CDATA remain content while XML declarations stay forbidden", () => {
+  const withHtmlDoctype = rss.replace(
+    "<p>A short <strong>technical</strong> summary.</p><script>bad()</script>",
+    '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"><p>Useful details</p>',
+  );
+  assert.equal(parseFeedXml(withHtmlDoctype, config).items[0]?.title, "Safe & useful <update>");
+  assert.throws(() => parseFeedXml(`<!DOCTYPE rss>${rss}`, config), /forbidden/);
+});
+
+test("Linux releases use only feed-provided, release-matched changelog URLs", () => {
+  const kernelConfig = {
+    ...config,
+    allowedArticleHosts: ["cdn.kernel.org"],
+    articleLinkPolicy: "linux_kernel_changelog",
+    sourceKey: "linux-kernel-archives",
+    topic: "linux",
+  };
+  const kernelFeed = `<?xml version="1.0"?><rss version="2.0"><channel><title>Kernel releases</title>
+    <item><title>6.12.3: stable</title><link>https://www.kernel.org/</link>
+      <guid>kernel.org,stable,6.12.3,2026-10-13</guid><pubDate>Tue, 13 Oct 2026 12:00:00 GMT</pubDate>
+      <description><![CDATA[<a href="https://cdn.kernel.org/pub/linux/kernel/v6.x/ChangeLog-6.12.3">ChangeLog</a>]]></description>
+    </item>
+    <item><title>7.0-rc1: mainline</title><link>https://www.kernel.org/</link>
+      <guid>kernel.org,mainline,7.0-rc1,2026-10-13</guid><pubDate>Tue, 13 Oct 2026 13:00:00 GMT</pubDate>
+      <description><![CDATA[No release-specific changelog link.]]></description>
+    </item>
+  </channel></rss>`;
+  const parsed = parseFeedXml(kernelFeed, kernelConfig);
+  assert.equal(parsed.items.length, 1);
+  assert.equal(parsed.rejectedItemCount, 1);
+  assert.equal(
+    parsed.items[0]?.canonicalUrl,
+    "https://cdn.kernel.org/pub/linux/kernel/v6.x/ChangeLog-6.12.3",
+  );
+
+  const mismatched = kernelFeed.replace("ChangeLog-6.12.3", "ChangeLog-6.12.2");
+  assert.throws(() => parseFeedXml(mismatched, kernelConfig), /No valid items/);
+});
+
 test("fetching enforces content type, size, and publisher failure isolation", async () => {
   const validFetch = async () => new Response(rss, {
     headers: { "content-type": "application/rss+xml" },

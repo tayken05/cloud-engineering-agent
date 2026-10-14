@@ -97,7 +97,15 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Added the latest fully successful collection timestamp to Stories & News without exposing operational errors. Development verified genuine fetching, repeat idempotency, concurrent skip behavior, expired-lease recovery, and partial failure records.
 - Production rollout registered the Cron on the intended Git-sourced deployment. The controlled authenticated run processed six publishers, inserted one new item, recognized 109 existing items, released its lease, and left zero duplicate identity groups; an unauthenticated request returned 401 with no run record. The first platform-scheduled invocation remains pending until the next 06:00–06:59 UTC Hobby execution window.
 
-## Planned phase: Expanded verified intelligence
+## Task 8: Expanded technology intelligence coverage — implemented
+
+- Added six verified feeds for Azure Blog, Linux Kernel Archives, Cisco Security Advisories, GitHub Engineering, NIST Cybersecurity Insights, and NVIDIA Technical Blog, bringing the scheduled catalog to 12 feeds.
+- Added Cisco Security Advisories as the twelfth registered source; all other additions reuse approved catalog records. No schema migration was needed.
+- Resolved the Linux homepage-link collision by accepting only official, version-matched stable/LTS changelog URLs embedded in `kdist.xml`; entries without such evidence remain skipped.
+- Kept concurrency two, the 15-second fetch timeout, one bounded retry, exact host controls, the single daily Cron, PostgreSQL lease, and durable run records. The catalog ceiling is 210 items and the theoretical two-pass network window is 180.75 seconds within the 225-second route budget.
+- Development processed all 12 feeds and 182 live entries. The initial expansion added 75 genuine records; a stable-window repeat added zero and retained zero duplicate identity groups. The guarded production run processed all 12 feeds, inserted 74 new records, recognized 108 unchanged identities, and left production at 185 items with zero duplicates, zero active leases, and nine unchanged Neon Auth tables.
+
+## Planned phase: Verified story intelligence
 
 When separately authorized, design deterministic story grouping and evidence review/corrections without treating publisher provenance as independent verification. Review source cursor policies and richer private operational observability only when actual run history demonstrates a need. The collector stores bounded publisher metadata only.
 

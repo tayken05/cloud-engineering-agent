@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: visual shell deployed; the intelligence schema, curated source catalog, and collected publisher metadata exist in Neon development and production. Task 7 adds protected daily collection, durable PostgreSQL run monitoring, bounded retry, lease-based concurrency control, and factual freshness on Stories & News. Verified story processing, content, engagement, and private-data capabilities below remain planned.
+Status: visual shell deployed; the intelligence schema, 12-source catalog, and collected publisher metadata exist in Neon development and production. Task 8 expands the protected daily collector to 12 verified feeds across cloud, networking, Linux, DevOps, cybersecurity, software engineering, and AI infrastructure while retaining durable monitoring, bounded retry, lease-based concurrency control, and factual freshness. Verified story processing, content, engagement, and private-data capabilities below remain planned.
 Recorded: 2026-10-12.
 
 ## Vision and boundaries

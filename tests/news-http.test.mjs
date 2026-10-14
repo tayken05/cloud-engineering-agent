@@ -37,10 +37,18 @@ test("category and publisher filters constrain collected records", async () => {
   const kubernetes = await getNews("?source=kubernetes-blog");
   assert.match(resultList(kubernetes), /Kubernetes Blog/);
   assert.doesNotMatch(resultList(kubernetes), /Cloudflare Blog/);
+
+  const cybersecurity = await getNews("?topic=cybersecurity");
+  assert.match(resultList(cybersecurity), /Cisco Security Advisories|NIST Cybersecurity Insights/);
+  assert.doesNotMatch(resultList(cybersecurity), /AWS Architecture Blog/);
+
+  const linux = await getNews("?topic=linux");
+  assert.match(resultList(linux), /Linux Kernel Archives/);
+  assert.doesNotMatch(resultList(linux), /Google Cloud Blog/);
 });
 
 test("a valid category without records renders the honest empty state", async () => {
-  const html = await getNews("?topic=cybersecurity");
+  const html = await getNews("?topic=artificial_intelligence");
   assert.match(html, /No publisher updates match these filters/);
   assert.match(html, /0 collected items/);
 });

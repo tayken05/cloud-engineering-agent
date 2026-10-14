@@ -13,13 +13,14 @@ async function getSources(search = "") {
 
 test("the Sources page renders the database-backed approved catalog", async () => {
   const html = await getSources();
-  assert.match(html, /11<!-- --> <!-- -->sources/);
+  assert.match(html, /12<!-- --> <!-- -->sources/);
   for (const name of [
     "AWS Architecture Blog",
     "Microsoft Azure Blog",
     "Google Cloud Blog",
     "Linux Kernel Archives",
     "NVIDIA Technical Blog",
+    "Cisco Security Advisories",
   ]) {
     assert.match(html, new RegExp(name));
   }

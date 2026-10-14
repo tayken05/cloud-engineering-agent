@@ -12,9 +12,9 @@ import { sourceKind, intelligenceTopic } from "../src/server/db/schema.ts";
 import { TRUSTED_SOURCE_CATALOG } from "../src/server/sources/trusted-source-catalog.ts";
 
 test("the approved catalog contains unique HTTPS first-party source identities", () => {
-  assert.equal(TRUSTED_SOURCE_CATALOG.length, 11);
-  assert.equal(new Set(TRUSTED_SOURCE_CATALOG.map((source) => source.key)).size, 11);
-  assert.equal(new Set(TRUSTED_SOURCE_CATALOG.map((source) => source.canonicalUrl)).size, 11);
+  assert.equal(TRUSTED_SOURCE_CATALOG.length, 12);
+  assert.equal(new Set(TRUSTED_SOURCE_CATALOG.map((source) => source.key)).size, 12);
+  assert.equal(new Set(TRUSTED_SOURCE_CATALOG.map((source) => source.canonicalUrl)).size, 12);
   for (const source of TRUSTED_SOURCE_CATALOG) {
     const url = new URL(source.canonicalUrl);
     assert.equal(url.protocol, "https:");

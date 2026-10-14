@@ -1,5 +1,7 @@
 export const newsIngestionConfig = Object.freeze({
-  minimumSuccessfulFeeds: 4,
+  maximumFeedCount: 12,
+  maximumTotalItems: 210,
+  minimumSuccessfulFeeds: 8,
   productionConfirmation:
     "INGEST APPROVED NEWS INTO NEON MAIN ep-spring-grass-b7iye83x",
 });
@@ -33,8 +35,8 @@ export function parseNewsIngestionCommand(arguments_) {
 }
 
 export function validateFeedCatalog(configs) {
-  if (!Array.isArray(configs) || configs.length < 4 || configs.length > 6) {
-    stop("The news collector must use between four and six reviewed feeds.");
+  if (!Array.isArray(configs) || configs.length < 4 || configs.length > newsIngestionConfig.maximumFeedCount) {
+    stop("The news collector exceeds its reviewed feed-count bounds.");
   }
   const sourceKeys = new Set();
   const feedUrls = new Set();
@@ -62,8 +64,18 @@ export function validateFeedCatalog(configs) {
     ) {
       stop("The feed catalog contains a duplicate or unsafe batch configuration.");
     }
+    if (
+      config.articleLinkPolicy !== undefined &&
+      (config.articleLinkPolicy !== "linux_kernel_changelog" || config.sourceKey !== "linux-kernel-archives")
+    ) {
+      stop("The feed catalog contains an unsupported article-link policy.");
+    }
     sourceKeys.add(config.sourceKey);
     feedUrls.add(config.feedUrl);
+  }
+  const totalItems = configs.reduce((total, config) => total + config.maxItems, 0);
+  if (totalItems > newsIngestionConfig.maximumTotalItems) {
+    stop("The feed catalog exceeds its reviewed item-processing bound.");
   }
   return configs;
 }

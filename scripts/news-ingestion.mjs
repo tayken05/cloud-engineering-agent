@@ -11,10 +11,12 @@ import { drizzle } from "drizzle-orm/neon-serverless";
 
 import { sources } from "../src/server/db/schema.ts";
 import { VERIFIED_FEEDS } from "../src/server/ingestion/feed-catalog.ts";
-import { collectFeeds } from "../src/server/ingestion/feed-fetcher.ts";
-import { persistCollectedFeeds } from "../src/server/ingestion/source-item-persistence.ts";
+import { collectFeedsWithRetry } from "../src/server/ingestion/feed-retry.ts";
+import { createCollectionRunStore } from "../src/server/ingestion/collection-store.ts";
+import { runNewsCollection } from "../src/server/ingestion/run-collection.ts";
 import { loadProductionCredential } from "./production-migration-guard.mjs";
 import { productionMigrationConfig } from "./production-migration.config.mjs";
+import { migrationHistoryMatches } from "./migration-history-guard.mjs";
 import {
   loadDevelopmentCredential,
   sourceCatalogConfig,
@@ -115,12 +117,8 @@ async function inspectDatabase(client, production) {
       stop("The managed authentication schema must not be in the active search path.");
     }
     const history = await client.query("SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id");
-    if (
-      history.rowCount !== 1 ||
-      history.rows[0]?.hash !== productionMigrationConfig.migrationSha256 ||
-      Number(history.rows[0]?.created_at) !== productionMigrationConfig.migrationTimestamp
-    ) {
-      stop("The database migration history does not match the approved initial schema.");
+    if (!migrationHistoryMatches(history.rows)) {
+      stop("The database migration history does not match the approved schema migrations.");
     }
     const authCatalog = await getAuthCatalog(client);
     if (production && authCatalog.tableCount !== productionMigrationConfig.expectedAuthTableCount) {
@@ -198,6 +196,46 @@ async function confirmProduction() {
   }
 }
 
+async function collectApprovedFeeds(signal) {
+  const collection = await collectFeedsWithRetry(feedConfigs, { signal });
+  for (const failure of collection.failures) {
+    console.warn(`Feed unavailable (${failure.sourceKey}): ${failure.reason}`);
+  }
+  if (collection.successes.length < newsIngestionConfig.minimumSuccessfulFeeds) {
+    stop("Too few approved feeds completed safely; no source-item write is allowed.");
+  }
+  const itemCount = collection.successes.reduce(
+    (total, result) => total + result.feed.items.length,
+    0,
+  );
+  console.log(
+    `Feed validation passed: ${collection.successes.length} publishers and ${itemCount} bounded items.`,
+  );
+  return collection;
+}
+
+async function verifyRunRecord(client, result) {
+  const record = await client.query(`
+    SELECT status, sources_attempted, sources_succeeded, sources_failed,
+      items_inserted, items_updated, items_unchanged, lease_token, lease_expires_at
+    FROM public.collection_runs WHERE id = $1
+  `, [result.runId]);
+  const row = record.rows[0];
+  if (
+    record.rowCount !== 1 ||
+    row.status !== result.status ||
+    Number(row.sources_succeeded) !== result.successfulSources ||
+    Number(row.sources_failed) !== result.failedSources ||
+    Number(row.items_inserted) !== result.insertedItems ||
+    Number(row.items_updated) !== result.updatedItems ||
+    Number(row.items_unchanged) !== result.unchangedItems ||
+    row.lease_token !== null ||
+    row.lease_expires_at !== null
+  ) {
+    stop("The durable collection-run record does not match the completed operation.");
+  }
+}
+
 async function main() {
   const command = parseNewsIngestionCommand(process.argv.slice(2));
   const production = command.environment === "production";
@@ -215,69 +253,95 @@ async function main() {
     stop("The credential does not match the selected approved environment.");
   }
 
-  const collection = await collectFeeds(feedConfigs);
-  for (const failure of collection.failures) {
-    console.warn(`Feed unavailable (${failure.sourceKey}): ${failure.reason}`);
-  }
-  if (collection.successes.length < newsIngestionConfig.minimumSuccessfulFeeds) {
-    stop("Too few approved feeds completed safely; no database write is allowed.");
-  }
-  const itemCount = collection.successes.reduce((total, result) => total + result.feed.items.length, 0);
-  console.log(`Feed validation passed: ${collection.successes.length} publishers and ${itemCount} bounded items.`);
-
-  const pool = new Pool({
+  const preflightPool = new Pool({
     connectionString: credential.connectionString,
     connectionTimeoutMillis: 15_000,
     max: 1,
   });
-  let client;
+  let before;
   try {
-    client = await pool.connect();
-    await client.query("SET statement_timeout = '20s'");
-    await client.query("SET lock_timeout = '5s'");
-    const db = drizzle(client);
-    assertFeedSources(await selectFeedSources(db));
-    await inspectDatabase(client, production);
-    const existingItems = await verifyStoredItems(
-      client,
-      feedConfigs.map((config) => config.sourceKey),
-    );
-    const existingItemCount = existingItems.reduce(
-      (total, row) => total + Number(row.item_count),
-      0,
-    );
-    console.log(`${command.environment} preflight passed: endpoint, database, migration, sources, and authentication boundary.`);
-    console.log(`Existing stored items across configured publishers: ${existingItemCount}; duplicate identity groups: 0.`);
-    console.log(existingItems.map((row) => `${row.key}=${row.item_count}`).join(", "));
-    if (command.mode === "preflight") return;
-
-    if (production) await confirmProduction();
-    const repeated = await inspectDatabase(client, production);
-    const result = await persistCollectedFeeds(db, collection, new Date());
-    const after = await inspectDatabase(client, production);
-    if (
-      repeated.counts.sources !== after.counts.sources ||
-      repeated.counts.stories !== after.counts.stories ||
-      repeated.counts.story_source_items !== after.counts.story_source_items
-    ) {
-      stop("A protected application table count changed unexpectedly.");
+    const client = await preflightPool.connect();
+    try {
+      await client.query("SET statement_timeout = '20s'");
+      await client.query("SET lock_timeout = '5s'");
+      const db = drizzle(client);
+      assertFeedSources(await selectFeedSources(db));
+      before = await inspectDatabase(client, production);
+      const existingItems = await verifyStoredItems(
+        client,
+        feedConfigs.map((config) => config.sourceKey),
+      );
+      const existingItemCount = existingItems.reduce(
+        (total, row) => total + Number(row.item_count),
+        0,
+      );
+      console.log(`${command.environment} preflight passed: endpoint, database, migration, sources, and authentication boundary.`);
+      console.log(`Existing stored items across configured publishers: ${existingItemCount}; duplicate identity groups: 0.`);
+      console.log(existingItems.map((row) => `${row.key}=${row.item_count}`).join(", "));
+    } finally {
+      client.release();
     }
-    if (repeated.authCatalog.fingerprint !== after.authCatalog.fingerprint) {
-      stop("The managed authentication catalog changed unexpectedly.");
-    }
-    const stored = await verifyStoredItems(
-      client,
-      collection.successes.map((result) => result.config.sourceKey),
-    );
-    const totalStored = stored.reduce((total, row) => total + Number(row.item_count), 0);
-    console.log(
-      `News ingestion succeeded: ${result.insertedCount} inserted, ${result.updatedCount} updated, ${result.unchangedCount} seen unchanged.`,
-    );
-    console.log(`Verified stored items across connected publishers: ${totalStored}.`);
-    console.log("Stories, evidence links, source count, and the managed authentication catalog were unchanged.");
   } finally {
-    client?.release();
-    await pool.end().catch(() => undefined);
+    await preflightPool.end().catch(() => undefined);
+  }
+
+  if (command.mode === "preflight") {
+    await collectApprovedFeeds();
+    return;
+  }
+  if (production) await confirmProduction();
+
+  const store = await createCollectionRunStore({
+    connectionString: credential.connectionString,
+    expectedEndpoint,
+    mode: "direct",
+  });
+  const result = await runNewsCollection({
+    collect: collectApprovedFeeds,
+    store,
+    trigger: "manual",
+  });
+  if (result.status === "failed" || result.status === "skipped") {
+    stop(`The controlled collection ended with status ${result.status}.`);
+  }
+
+  const postflightPool = new Pool({
+    connectionString: credential.connectionString,
+    connectionTimeoutMillis: 15_000,
+    max: 1,
+  });
+  try {
+    const client = await postflightPool.connect();
+    try {
+      await client.query("SET statement_timeout = '20s'");
+      await client.query("SET lock_timeout = '5s'");
+      const after = await inspectDatabase(client, production);
+      if (
+        before.counts.sources !== after.counts.sources ||
+        before.counts.stories !== after.counts.stories ||
+        before.counts.story_source_items !== after.counts.story_source_items
+      ) {
+        stop("A protected application table count changed unexpectedly.");
+      }
+      if (before.authCatalog.fingerprint !== after.authCatalog.fingerprint) {
+        stop("The managed authentication catalog changed unexpectedly.");
+      }
+      await verifyRunRecord(client, result);
+      const stored = await verifyStoredItems(
+        client,
+        feedConfigs.map((config) => config.sourceKey),
+      );
+      const totalStored = stored.reduce((total, row) => total + Number(row.item_count), 0);
+      console.log(
+        `News ingestion succeeded: ${result.insertedItems} inserted, ${result.updatedItems} updated, ${result.unchangedItems} seen unchanged.`,
+      );
+      console.log(`Verified stored items across connected publishers: ${totalStored}.`);
+      console.log("The durable run record is complete; stories, evidence links, source count, and managed authentication were unchanged.");
+    } finally {
+      client.release();
+    }
+  } finally {
+    await postflightPool.end().catch(() => undefined);
   }
 }
 

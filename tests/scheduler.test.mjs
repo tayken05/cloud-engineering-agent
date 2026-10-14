@@ -2,11 +2,40 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { authorizeCronRequest } from "../src/server/cron/authorize-cron.ts";
+import { validateCollectionDatabaseUrl } from "../src/server/ingestion/collection-store.ts";
 import { VERIFIED_FEEDS } from "../src/server/ingestion/feed-catalog.ts";
 import { collectFeedsWithRetry, FEED_RETRY_DELAY_MS } from "../src/server/ingestion/feed-retry.ts";
 import { runNewsCollection } from "../src/server/ingestion/run-collection.ts";
 
 const secret = "a-secure-test-value-that-is-at-least-thirty-two-characters";
+
+function databaseUrl(endpoint, pooled) {
+  return `postgresql://user:password@${endpoint}${pooled ? "-pooler" : ""}.example.neon.tech/neondb?sslmode=require`;
+}
+
+test("collection connections require the exact endpoint and requested connection mode", () => {
+  const endpoint = "ep-approved";
+  assert.equal(validateCollectionDatabaseUrl(databaseUrl(endpoint, true), {
+    expectedEndpoint: endpoint,
+    mode: "pooled",
+  }), databaseUrl(endpoint, true));
+  assert.equal(validateCollectionDatabaseUrl(databaseUrl(endpoint, false), {
+    expectedEndpoint: endpoint,
+    mode: "direct",
+  }), databaseUrl(endpoint, false));
+  assert.throws(() => validateCollectionDatabaseUrl(databaseUrl("ep-other", false), {
+    expectedEndpoint: endpoint,
+    mode: "direct",
+  }), /unexpected database endpoint/);
+  assert.throws(() => validateCollectionDatabaseUrl(databaseUrl(endpoint, true), {
+    expectedEndpoint: endpoint,
+    mode: "direct",
+  }), /direct Neon/);
+  assert.throws(() => validateCollectionDatabaseUrl(
+    databaseUrl(endpoint, false).replace("sslmode=require", "sslmode=disable"),
+    { expectedEndpoint: endpoint, mode: "direct" },
+  ), /requires TLS/);
+});
 
 test("cron authentication fails closed outside production and for missing or invalid secrets", () => {
   const request = new Request("https://example.test/api/cron/news", {

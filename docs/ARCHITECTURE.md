@@ -1,6 +1,6 @@
 # Architecture
 
-Status: application shell deployed; the initial database migration is validated on development and production; the Technology Sources Catalog and first bounded news collector are live. Automated scheduling, story grouping/verification, and the remaining product workflows remain planned.
+Status: application shell deployed; database migrations are validated on development and production; the 12-source Technology Sources Catalog and 12-feed bounded news collector are live. Daily automated scheduling is implemented. Story grouping/verification and the remaining product workflows remain planned.
 
 ## Current application
 
@@ -11,7 +11,7 @@ Status: application shell deployed; the initial database migration is validated 
 - `@/*` resolves to `src/*`.
 - Root configuration contains Next.js, TypeScript, and ESLint settings.
 - `docs/` contains product requirements, roadmap, architecture, and decisions. Root `AGENTS.md` governs coding-agent work.
-- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata and `/stories` lists collected publisher updates from PostgreSQL; the other ten feature routes remain descriptive empty states. Automated scheduling, verified story creation, content, engagement, private-data workflows, authentication, and jobs remain planned.
+- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata and `/stories` lists collected publisher updates from PostgreSQL; the other ten feature routes remain descriptive empty states. Verified story creation, content, engagement, private-data workflows, and authentication remain planned.
 
 ## Implemented application shell
 
@@ -49,7 +49,7 @@ Task 4B.9 adds a manual production migration boundary without adding runtime dat
 
 The application owns the new objects in `public` and the migration record in `drizzle`; Neon owns `neon_auth`. The production runner requires the verified nine-table authentication baseline and compares authentication catalog fingerprints around migration. It contains no authentication DDL or DML. Endpoint-to-branch ownership must still be reverified through Neon metadata immediately before a future authorized execution because PostgreSQL cannot attest a Neon branch name from SQL alone.
 
-Task 4B.10 executed the initial production migration through this boundary. The resulting schema matches the development-tested artifact: 4 application tables, 58 columns, 6 enums, 4 primary keys, 5 unique constraints, 16 checks, 3 restrictive foreign keys, 17 indexes, and one matching Drizzle history row. Task 5 inserted the approved 11-row source catalog in both environments. Task 6 inserted 110 collected items from six reviewed feeds into each environment; `stories` and `story_source_items` remain empty, and the managed `neon_auth` catalog is unchanged.
+Task 4B.10 executed the initial production migration through this boundary, and Task 7 added the collection-run migration. The current schema has five application tables plus Drizzle history. Task 8 keeps the schema unchanged, expands the approved catalog to 12 sources, and expands collection from six to 12 feeds. `stories` and `story_source_items` remain empty, and the managed `neon_auth` catalog remains outside application writes.
 
 ## Technology Sources Catalog — Task 5
 
@@ -58,17 +58,24 @@ Task 4B.10 executed the initial production migration through this boundary. The 
 - Search, topic, source-type, and enabled-status filters use GET parameters and native accessible controls. The catalog has responsive result and empty states. It displays no reliability score, freshness claim, item statistics, or fabricated content.
 - The first version deliberately does not cache results. Each incoming request reads the current catalog; this behavior is documented in code and database documentation.
 - Catalog population remains separate administrative tooling. Exact development and production direct-endpoint allowlists, migration-history checks, conflict detection, insert-only transactions, and production interactive confirmation protect the operation. No route, Server Action, or API handler can write sources.
-- Eleven registered first-party sources cover AWS, Azure, Google Cloud, Linux, networking, Kubernetes/cloud native, DevOps, infrastructure as code, cybersecurity, software engineering, and AI infrastructure. Registration identifies provenance; it does not verify every item a publisher may publish.
+- Twelve registered first-party sources cover AWS, Azure, Google Cloud, Linux, networking, Kubernetes/cloud native, DevOps, infrastructure as code, cybersecurity, software engineering, and AI infrastructure. Cisco Security Advisories is the only Task 8 catalog addition; the other new feed activations reuse registered publishers. Registration identifies provenance; it does not verify every item a publisher may publish.
 
 ## Technology news collection — Task 6
 
-- Six static first-party feed definitions connect AWS Architecture, Google Cloud, Cloudflare, Kubernetes, CNCF, and HashiCorp to their registered source keys. Feed URLs are configuration, not database columns or user input. The valid Linux kernel distribution feed remains inactive because its entries share one homepage URL and therefore cannot satisfy the approved canonical-URL identity constraint without inventing URLs.
+- Twelve static first-party feed definitions connect AWS Architecture, Google Cloud, Cloudflare, Kubernetes, CNCF, HashiCorp, Azure, Linux Kernel Archives, Cisco PSIRT, GitHub Engineering, NIST Cybersecurity Insights, and NVIDIA Technical Blog to registered source keys. Feed URLs are configuration, not database columns or user input.
 - `src/server/ingestion/` separates reviewed configuration, bounded fetching, XML normalization, and identity planning. Fetches accept HTTPS only, enforce exact host allowlists across at most two redirects, reject IP literals and XML declarations/entities, allow only XML feed content types, stop after 15 seconds or 2 MiB, cap each feed at 20 entries, and use concurrency two. One failed publisher does not discard other successful fetches.
-- `fast-xml-parser` 5.11.2 parses RSS and Atom with entity processing disabled after XML validation and explicit DOCTYPE/ENTITY rejection. Normalization strips markup to plain text, bounds stored summaries to 700 characters, accepts only approved article hosts, removes URL fragments, preserves provider IDs and original links, and keeps publication time separate from collection time.
-- `scripts/news-ingestion.mjs` is operator-only. Development and production require their exact direct endpoint allowlists, the applied migration, registered active sources, and a safe authentication boundary. Production additionally requires the dedicated ignored `0600` credential and an exact interactive phrase. Writes are transactional, source-scoped, conflict-aware, and limited to `source_items` plus `sources.last_collected_at`/`updated_at`. No migration, story creation, evidence link, or `neon_auth` operation occurs.
+- `fast-xml-parser` 5.11.2 parses RSS and Atom with entity processing disabled after XML validation and explicit document-level DOCTYPE/ENTITY rejection. HTML declarations inside CDATA remain inert content. Normalization strips markup to plain text, bounds stored summaries to 700 characters, accepts only approved article hosts, removes URL fragments, preserves provider IDs and original links, and keeps publication time separate from collection time.
+- `scripts/news-ingestion.mjs` is operator-only. Development and production require their exact direct endpoint allowlists, both applied migrations, registered active sources, and a safe authentication boundary. Production additionally requires the dedicated ignored `0600` credential and an exact interactive phrase. It uses the shared retry, PostgreSQL lease, transaction, and durable run record. Writes remain source-scoped and limited to collected metadata, source collection timestamps, and collection monitoring. No migration, story creation, evidence link, or `neon_auth` operation occurs.
 - Repeated items resolve by both external ID and canonical URL. Split identities stop rather than merge silently; first collection and original URL remain stable; last-seen time advances; changed publisher metadata updates in place. Database uniqueness remains the concurrency backstop. Development repeat verification inserted zero duplicates after the initial 110 records.
 - `/stories` is an uncached, request-rendered Server Component. Its server-only Drizzle query returns at most 100 newest items, with validated category/publisher filters and fixed safe errors. React renders stored plain text through normal escaping. The interface labels every entry as collected publisher metadata that is not independently verified.
-- There is no public ingestion handler, Server Action, API endpoint, scheduler, or Vercel Cron. A future durable worker must add retries/backoff and run history before scheduling is enabled.
+- The only ingestion handler is the production-only, secret-authenticated Cron endpoint added in Task 7. There is no public Server Action or unrestricted administrative write API.
+
+## Expanded intelligence coverage — Task 8
+
+- New active feeds: Azure Blog, Linux Kernel Archives, Cisco Security Advisories, GitHub Engineering, NIST Cybersecurity Insights, and NVIDIA Technical Blog. Existing feeds continue unchanged, for 12 total.
+- Linux stable/LTS entries use only official version-matched changelog URLs embedded by `kdist.xml`; mainline/linux-next entries without one are skipped. This preserves the existing `(source_id, canonical_url)` identity constraint without fabricating links.
+- The reviewed catalog caps the 12 feeds at 210 possible items per run. Concurrency remains two, the per-request timeout remains 15 seconds, and one retry remains limited to failed publishers. The theoretical network timeout window is 180.75 seconds; real development verification collected 182 entries from all publishers and the optimized guarded repeat completed in about 55 seconds.
+- The Stories interface and query schema needed no taxonomy change. Existing enum categories now carry real cloud, networking, Linux, DevOps/infrastructure, cybersecurity, software-engineering, containers/Kubernetes, and AI-infrastructure records. Filters remain validated and newest-first.
 
 ## Planned module boundaries
 

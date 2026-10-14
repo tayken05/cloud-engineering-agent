@@ -128,6 +128,23 @@ function normalizeArticleUrl(value: unknown, allowedHosts: readonly string[]): s
   return url.toString();
 }
 
+function rssArticleUrl(
+  item: UnknownRecord,
+  title: string,
+  config: FeedSourceConfig,
+): unknown {
+  if (config.articleLinkPolicy !== "linux_kernel_changelog") return item.link;
+
+  const version = /^([0-9][0-9A-Za-z._-]*):\s+(?:stable|longterm)$/i.exec(title)?.[1];
+  const description = scalarText(item.description);
+  if (!version || !description) return undefined;
+
+  const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `https://cdn\\.kernel\\.org/pub/linux/kernel/v[0-9]+\\.x/ChangeLog-${escapedVersion}(?=[\\s\"'<>]|$)`,
+  ).exec(description)?.[0];
+}
+
 function atomLink(value: unknown): unknown {
   const links = asArray(value);
   const alternate = links.find((entry) => {
@@ -154,7 +171,7 @@ function normalizeItem(
   if (!item) throw new FeedParseError("A feed entry is not an object.");
   const title = toPlainText(item.title, 500);
   if (!title) throw new FeedParseError("An item is missing a title.");
-  const linkValue = format === "atom" ? atomLink(item.link) : item.link;
+  const linkValue = format === "atom" ? atomLink(item.link) : rssArticleUrl(item, title, config);
   const originalUrl = normalizeArticleUrl(linkValue, config.allowedArticleHosts);
   const publishedAt = itemDate(format === "atom" ? (item.published ?? item.updated) : item.pubDate);
   const authorValue = format === "atom" ? item.author : (item["dc:creator"] ?? item.author);
@@ -177,7 +194,8 @@ export function parseFeedXml(xml: string, config: FeedSourceConfig): ParsedFeed 
   if (Buffer.byteLength(xml, "utf8") > MAX_FEED_BYTES) {
     throw new FeedParseError("The feed exceeds the configured response-size limit.");
   }
-  if (/<!DOCTYPE\b|<!ENTITY\b/i.test(xml)) {
+  const markupOutsideCdata = xml.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, "");
+  if (/<!DOCTYPE\b|<!ENTITY\b/i.test(markupOutsideCdata)) {
     throw new FeedParseError("Document type and entity declarations are forbidden.");
   }
   const validation = XMLValidator.validate(xml, { allowBooleanAttributes: false });

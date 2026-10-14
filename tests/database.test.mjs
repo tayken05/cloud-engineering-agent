@@ -3,6 +3,11 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import test from "node:test";
+
+import {
+  approvedMigrationHistory,
+  migrationHistoryMatches,
+} from "../scripts/migration-history-guard.mjs";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { getDatabaseUrl } from "../src/server/db/environment.ts";
 import { collectionRuns, sources, sourceItems, stories, storySourceItems } from "../src/server/db/schema.ts";
@@ -106,6 +111,18 @@ test("migration history contains only reviewed additive schema entries", async (
       assert.doesNotMatch(statement, /neon_auth/i);
     }
   }
+});
+
+test("operator tooling accepts only the exact applied migration history", () => {
+  const rows = approvedMigrationHistory.map((migration) => ({
+    created_at: migration.timestamp,
+    hash: migration.hash,
+  }));
+  assert.equal(migrationHistoryMatches(rows), true);
+  assert.equal(migrationHistoryMatches(rows.slice(0, 1)), false);
+  assert.equal(migrationHistoryMatches(rows.map((row, index) => (
+    index === 1 ? { ...row, hash: "unexpected" } : row
+  ))), false);
 });
 
 test("the collection-run migration matches fresh offline generation from the initial snapshot", async () => {

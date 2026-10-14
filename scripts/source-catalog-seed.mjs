@@ -13,6 +13,7 @@ import { sources } from "../src/server/db/schema.ts";
 import { TRUSTED_SOURCE_CATALOG } from "../src/server/sources/trusted-source-catalog.ts";
 import { loadProductionCredential } from "./production-migration-guard.mjs";
 import { productionMigrationConfig } from "./production-migration.config.mjs";
+import { migrationHistoryMatches } from "./migration-history-guard.mjs";
 import {
   loadDevelopmentCredential,
   parseSourceCatalogCommand,
@@ -138,12 +139,8 @@ async function inspect(client, production) {
     const history = await client.query(`
       SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY id
     `);
-    if (
-      history.rowCount !== 1 ||
-      history.rows[0]?.hash !== productionMigrationConfig.migrationSha256 ||
-      Number(history.rows[0]?.created_at) !== productionMigrationConfig.migrationTimestamp
-    ) {
-      stop("The database migration history does not match the approved initial schema.");
+    if (!migrationHistoryMatches(history.rows)) {
+      stop("The database migration history does not match the approved schema migrations.");
     }
 
     const appTables = await client.query(`
