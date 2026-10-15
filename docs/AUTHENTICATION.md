@@ -8,15 +8,21 @@ Authentication proves the session identity. Authorization separately requires th
 
 Public registration through the application Auth route is disabled. The public dashboard, Sources, Stories & News, Jobs, job detail pages, and Learning Series remain available. `/ideas` and `/studio` require the owner session.
 
-## Production owner enrollment
+## Production owner enrollment and recovery
 
-Production already has the managed `NEON_AUTH_BASE_URL` and a generated production-only `NEON_AUTH_COOKIE_SECRET`. Complete the one-time enrollment as follows:
+Production has `NEON_AUTH_BASE_URL`, a production-only `NEON_AUTH_COOKIE_SECRET`, and the explicitly selected owner's stable ID in `OWNER_AUTH_USER_ID`. The managed catalog contains one unbanned user. That user was created in the Neon console with a credential account but no password, and its email has not yet been verified.
 
-1. Create or approve the intended owner account through the Neon project's managed Auth administration workflow. Do not use an arbitrary first-user rule.
-2. Copy the account's stable managed-auth user ID from Neon. Verify the identity using the project owner's chosen email/account before continuing.
-3. Add that exact value to the existing Vercel project as a Production Secret named `OWNER_AUTH_USER_ID`.
-4. Redeploy the current reviewed commit so the new server-only variable is available.
-5. Sign in at `/auth/sign-in`; confirm `/ideas` and `/studio` load, an invalid password fails, sign-out clears the session, and a different authenticated user reaches `/auth/forbidden`.
+The application uses the managed Better Auth recovery APIs rather than creating a second user or writing `neon_auth` directly:
+
+1. `/forgot-password` requests a time-limited password-reset email. Completing the link creates the missing credential password on the existing user.
+2. `/verify-email` requests a separate signed verification link. Completing it verifies ownership of the existing email.
+3. `/sign-in` accepts the verified account and established password. Successful authentication is still followed by the exact stable-ID owner check before `/ideas`, `/studio`, or any private query/action can run.
+
+Both request forms return the same message for registered, unknown, and already-completed addresses. Public registration remains disabled. Recovery callback URLs are fixed server-side to `https://cloud-engineering-agent.vercel.app`; a user cannot supply an arbitrary redirect.
+
+The canonical production origin is registered in the managed Auth domain configuration for the Neon project and was verified through Neon's official CLI before enabling the recovery UI.
+
+The password page requires 12–128 characters and confirmation, does not log or retain the password, and sends it only to managed Neon Auth. Reset tokens are bounded, single-use provider tokens. The page is dynamically rendered and applies a no-referrer policy. Neon Auth's built-in origin/CSRF validation and Next.js Server Action origin checks remain enabled.
 
 Do not store the ID in `NEXT_PUBLIC_*`, commit it, or use email matching as the authorization boundary.
 

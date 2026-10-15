@@ -6,11 +6,20 @@ import { sections } from "@/lib/workspace";
 import { Navigation } from "./navigation";
 import { ThemeControl } from "./theme-control";
 
+const utilityTitles: Readonly<Record<string, string>> = {
+  "/sign-in": "Owner sign in",
+  "/auth/sign-in": "Owner sign in",
+  "/forgot-password": "Password setup",
+  "/reset-password": "Password setup",
+  "/verify-email": "Email verification",
+  "/auth/forbidden": "Access denied",
+};
+
 export function Header() {
   const pathname = usePathname();
   const menu = useRef<HTMLDetailsElement>(null);
   const summary = useRef<HTMLElement>(null);
-  const title = sections.find((section) => (
+  const title = utilityTitles[pathname] ?? sections.find((section) => (
     section.href === pathname || (section.href !== "/" && pathname.startsWith(`${section.href}/`))
   ))?.title ?? "Page not found";
 

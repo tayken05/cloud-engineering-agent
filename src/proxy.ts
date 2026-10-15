@@ -4,9 +4,9 @@ import { getAuth } from "@/server/auth/auth";
 
 export default function proxy(request: NextRequest) {
   try {
-    return getAuth().middleware({ loginUrl: "/auth/sign-in" })(request);
+    return getAuth().middleware({ loginUrl: "/sign-in" })(request);
   } catch {
-    return NextResponse.redirect(new URL("/auth/sign-in?error=configuration", request.url));
+    return NextResponse.redirect(new URL("/sign-in?error=configuration", request.url));
   }
 }
 

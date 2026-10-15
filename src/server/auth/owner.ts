@@ -16,7 +16,7 @@ export async function getRequiredOwnerId(): Promise<string> {
 export async function requireOwnerPage(returnTo: string): Promise<string> {
   try { return await getRequiredOwnerId(); } catch (error) {
     if (error instanceof OwnerAuthorizationError && error.reason === "forbidden") redirect("/auth/forbidden");
-    if (error instanceof OwnerAuthorizationError && error.reason === "configuration") redirect("/auth/sign-in?error=configuration");
-    redirect(`/auth/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+    if (error instanceof OwnerAuthorizationError && error.reason === "configuration") redirect("/sign-in?error=configuration");
+    redirect(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
   }
 }
