@@ -24,7 +24,7 @@ for (const path of ["/sign-in", "/auth/sign-in"]) {
   });
 }
 
-for (const [path, marker] of [["/forgot-password", "Send password setup link"], ["/verify-email", "Send verification link"]]) {
+for (const [path, marker] of [["/forgot-password", "Send password setup link"]]) {
   test(`${path} renders a privacy-preserving recovery form`, async () => {
     const response = await fetch(new URL(path, baseUrl), { signal: AbortSignal.timeout(30_000) });
     assert.equal(response.status, 200);
@@ -34,6 +34,19 @@ for (const [path, marker] of [["/forgot-password", "Send password setup link"], 
     assert.doesNotMatch(html, /OWNER_AUTH_USER_ID|NEON_AUTH_COOKIE_SECRET|postgres(?:ql)?:\/\//i);
   });
 }
+
+test("/verify-email renders the managed shared-provider code flow", async () => {
+  const response = await fetch(new URL("/verify-email", baseUrl), { signal: AbortSignal.timeout(30_000) });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Send verification code/);
+  assert.match(html, /Six-digit verification code/);
+  assert.match(html, /autoComplete="one-time-code"/);
+  assert.match(html, /Codes expire after[\s\S]*15[\s\S]*minutes/);
+  assert.match(html, /one-minute resend cooldown/);
+  assert.doesNotMatch(html, /verification link/i);
+  assert.doesNotMatch(html, /OWNER_AUTH_USER_ID|NEON_AUTH_COOKIE_SECRET|postgres(?:ql)?:\/\//i);
+});
 
 test("reset page rejects missing tokens without exposing a password form", async () => {
   const response = await fetch(new URL("/reset-password", baseUrl), { signal: AbortSignal.timeout(30_000) });
@@ -47,6 +60,18 @@ test("public managed-auth registration is disabled", async () => {
   const response = await fetch(new URL("/api/auth/sign-up/email", baseUrl), { method: "POST", headers: { "content-type": "application/json" }, body: "{}", signal: AbortSignal.timeout(30_000) });
   assert.equal(response.status, 404);
   assert.match(await response.text(), /Public registration is disabled/);
+});
+
+test("direct public email-code operations are disabled", async () => {
+  for (const path of ["/api/auth/email-otp/send-verification-otp", "/api/auth/email-otp/verify-email", "/api/auth/sign-in/email-otp"]) {
+    const response = await fetch(new URL(path, baseUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(30_000),
+    });
+    assert.equal(response.status, 404);
+  }
 });
 
 test("Learning Series remains public", async () => {

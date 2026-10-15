@@ -23,7 +23,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
         {query.signedOut ? <p className="auth-notice auth-notice-success" role="status">You have signed out securely.</p> : null}
         {query.passwordReset ? <p className="auth-notice auth-notice-success" role="status">Your password has been updated. Verify your email if needed, then sign in.</p> : null}
         {query.verified ? <p className="auth-notice auth-notice-success" role="status">Your email has been verified. You can now sign in.</p> : null}
-        {error ? <p className="auth-notice auth-notice-error" role="alert">{error === "configuration" ? "Owner authentication setup is incomplete." : error === "unavailable" ? "Authentication is temporarily unavailable. Please try again shortly." : error === "TOKEN_EXPIRED" || error === "INVALID_TOKEN" ? "That verification link is invalid or has expired. Request a new verification email." : "The email or password was not accepted. If setup is incomplete, use the recovery links below."}</p> : null}
+        {error ? <p className="auth-notice auth-notice-error" role="alert">{error === "configuration" ? "Owner authentication setup is incomplete." : error === "unavailable" ? "Authentication is temporarily unavailable. Please try again shortly." : error === "TOKEN_EXPIRED" || error === "INVALID_TOKEN" ? "Email verification could not be completed. Request a new six-digit code." : "The email or password was not accepted. If setup is incomplete, use the recovery links below."}</p> : null}
         <form action={signInAction} className="auth-form" aria-label="Owner sign in">
           <input type="hidden" name="returnTo" value={returnTo} />
           <div className="auth-field">

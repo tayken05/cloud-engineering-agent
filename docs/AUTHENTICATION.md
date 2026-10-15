@@ -15,14 +15,14 @@ Production has `NEON_AUTH_BASE_URL`, a production-only `NEON_AUTH_COOKIE_SECRET`
 The application uses the managed Better Auth recovery APIs rather than creating a second user or writing `neon_auth` directly:
 
 1. `/forgot-password` requests a time-limited password-reset email. Completing the link creates the missing credential password on the existing user.
-2. `/verify-email` requests a separate signed verification link. Completing it verifies ownership of the existing email.
+2. `/verify-email` requests the six-digit email OTP supported by Neon's shared provider. The owner enters the code in the application, which calls `emailOtp.verifyEmail` for the same existing account.
 3. `/sign-in` accepts the verified account and established password. Successful authentication is still followed by the exact stable-ID owner check before `/ideas`, `/studio`, or any private query/action can run.
 
-Both request forms return the same message for registered, unknown, and already-completed addresses. Public registration remains disabled. Recovery callback URLs are fixed server-side to `https://cloud-engineering-agent.vercel.app`; a user cannot supply an arbitrary redirect.
+Both request forms return the same message for registered, unknown, and already-completed addresses. Verification codes expire after 15 minutes. The page enforces a 60-second resend cooldown, while managed Auth applies the authoritative send and verification rate limits. Public registration remains disabled. The password recovery callback is fixed server-side to `https://cloud-engineering-agent.vercel.app`; a user cannot supply an arbitrary redirect.
 
 The canonical production origin is registered in the managed Auth domain configuration for the Neon project and was verified through Neon's official CLI before enabling the recovery UI.
 
-The password page requires 12–128 characters and confirmation, does not log or retain the password, and sends it only to managed Neon Auth. Reset tokens are bounded, single-use provider tokens. The page is dynamically rendered and applies a no-referrer policy. Neon Auth's built-in origin/CSRF validation and Next.js Server Action origin checks remain enabled.
+The password page requires 12–128 characters and confirmation, does not log or retain the password, and sends it only to managed Neon Auth. Reset tokens are bounded, single-use provider tokens. Verification accepts exactly six ASCII digits and never logs or persists the code. Auth pages are dynamically rendered; the reset page applies a no-referrer policy. Neon Auth's built-in origin/CSRF validation and Next.js Server Action origin checks remain enabled.
 
 Do not store the ID in `NEXT_PUBLIC_*`, commit it, or use email matching as the authorization boundary.
 

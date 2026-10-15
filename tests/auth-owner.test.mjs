@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readNeonAuthConfig, readOwnerAuthConfig } from "../src/server/auth/config.ts";
 import { authorizeOwnerId, OwnerAuthorizationError } from "../src/server/auth/owner-policy.ts";
-import { AUTH_CALLBACKS, normalizeEmail, normalizeResetToken, validateNewPassword } from "../src/server/auth/recovery-policy.ts";
+import { AUTH_CALLBACKS, EMAIL_VERIFICATION, normalizeEmail, normalizeEmailOtp, normalizeResetToken, validateNewPassword } from "../src/server/auth/recovery-policy.ts";
 
 const valid = { NEON_AUTH_BASE_URL: "https://example.neonauth.test", NEON_AUTH_COOKIE_SECRET: "x".repeat(32), OWNER_AUTH_USER_ID: "owner_user_123" };
 test("auth configuration validates server-only owner controls", () => {
@@ -25,9 +25,13 @@ test("recovery inputs are bounded and callbacks stay on the production applicati
   assert.equal(normalizeEmail("a".repeat(321)), null);
   assert.equal(normalizeResetToken("abcdefghijklmnop_123"), "abcdefghijklmnop_123");
   assert.equal(normalizeResetToken("bad token"), null);
+  assert.equal(normalizeEmailOtp(" 123456 "), "123456");
+  assert.equal(normalizeEmailOtp("12345"), null);
+  assert.equal(normalizeEmailOtp("12345a"), null);
+  assert.equal(normalizeEmailOtp("１２３４５６"), null);
   assert.equal(validateNewPassword("a secure passphrase", "a secure passphrase"), null);
   assert.equal(validateNewPassword("short", "short"), "password");
   assert.equal(validateNewPassword("a secure passphrase", "different secure passphrase"), "mismatch");
   assert.equal(new URL(AUTH_CALLBACKS.passwordReset).origin, "https://cloud-engineering-agent.vercel.app");
-  assert.equal(new URL(AUTH_CALLBACKS.emailVerified).origin, "https://cloud-engineering-agent.vercel.app");
+  assert.deepEqual(EMAIL_VERIFICATION, { codeLength: 6, expiresInMinutes: 15, resendCooldownSeconds: 60 });
 });

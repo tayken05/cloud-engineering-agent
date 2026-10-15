@@ -6,6 +6,9 @@ async function handle(request: Request, context: AuthRouteContext): Promise<Resp
   try {
     const path = (await context.params).path;
     if (path[0] === "sign-up") return Response.json({ error: "Public registration is disabled." }, { status: 404 });
+    if (path[0] === "email-otp" || (path[0] === "sign-in" && path[1] === "email-otp")) {
+      return Response.json({ error: "Direct email-code operations are disabled." }, { status: 404 });
+    }
     const handlers = getAuth().handler();
     const method = request.method as keyof typeof handlers;
     const handler = handlers[method];

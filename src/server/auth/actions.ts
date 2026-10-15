@@ -6,9 +6,16 @@ import { getAuth } from "./auth";
 import {
   AUTH_CALLBACKS,
   normalizeEmail,
+  normalizeEmailOtp,
   normalizeResetToken,
   validateNewPassword,
 } from "./recovery-policy";
+
+export type EmailVerificationActionState = Readonly<{
+  status: "idle" | "sent" | "verified" | "invalid" | "error";
+  message: string;
+  sentAt?: number;
+}>;
 
 function safeReturnTo(value: FormDataEntryValue | null): string {
   return typeof value === "string" && /^\/(ideas|studio)(?:[/?].*)?$/.test(value) ? value : "/ideas";
@@ -51,21 +58,47 @@ export async function requestPasswordSetupAction(formData: FormData): Promise<ne
   redirect("/forgot-password?requested=1");
 }
 
-export async function requestEmailVerificationAction(formData: FormData): Promise<never> {
+export async function requestEmailVerificationCodeAction(
+  _previousState: EmailVerificationActionState,
+  formData: FormData,
+): Promise<EmailVerificationActionState> {
   const email = normalizeEmail(formData.get("email"));
-  if (!email) redirect("/verify-email?error=invalid");
+  if (!email) return { status: "invalid", message: "Enter a valid email address." };
   let accepted = false;
   try {
-    const result = await getAuth().sendVerificationEmail({
+    const result = await getAuth().emailOtp.sendVerificationOtp({
       email,
-      callbackURL: AUTH_CALLBACKS.emailVerified,
+      type: "email-verification",
     });
-    accepted = !result.error;
+    accepted = !result.error && result.data?.success === true;
   } catch {
-    redirect("/verify-email?error=unavailable");
+    return { status: "error", message: "A code could not be sent. Wait one minute before trying again." };
   }
-  if (!accepted) redirect("/verify-email?error=unavailable");
-  redirect("/verify-email?requested=1");
+  if (!accepted) return { status: "error", message: "A code could not be sent. Wait one minute before trying again." };
+  return {
+    status: "sent",
+    message: "If the address is eligible, a six-digit verification code has been sent. Check the inbox and spam folder.",
+    sentAt: Date.now(),
+  };
+}
+
+export async function verifyEmailCodeAction(
+  _previousState: EmailVerificationActionState,
+  formData: FormData,
+): Promise<EmailVerificationActionState> {
+  const email = normalizeEmail(formData.get("email"));
+  const otp = normalizeEmailOtp(formData.get("otp"));
+  if (!email) return { status: "invalid", message: "Enter the same valid email address that received the code." };
+  if (!otp) return { status: "invalid", message: "Enter the six-digit code from the verification email." };
+  try {
+    const result = await getAuth().emailOtp.verifyEmail({ email, otp });
+    if (result.error || result.data?.status !== true) {
+      return { status: "invalid", message: "The code could not be verified. It may be invalid or expired. Request a new code and try again." };
+    }
+  } catch {
+    return { status: "error", message: "Email verification is temporarily unavailable. Please try again shortly." };
+  }
+  return { status: "verified", message: "Email verified successfully. Complete password setup for future sign-ins." };
 }
 
 export async function resetPasswordAction(formData: FormData): Promise<never> {
