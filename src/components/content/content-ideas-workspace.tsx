@@ -8,11 +8,14 @@ import {
   AUDIENCE_LEVELS,
   ENGAGEMENT_STYLES,
   IDEA_STATUSES,
+  TECHNICAL_CATEGORIES,
   type AudienceLevel,
   type ContentIdea,
+  type ContentWorkspaceState,
   type EngagementStyle,
   type EvidenceOption,
   type IdeaStatus,
+  type TechnicalCategory,
 } from "@/features/content-studio/content-types";
 import { useContentWorkspace } from "./content-workspace-store";
 
@@ -26,6 +29,7 @@ type IdeaForm = Readonly<{
   notes: string;
   status: IdeaStatus;
   subject: string;
+  technicalCategory: TechnicalCategory;
 }>;
 
 const EMPTY_FORM: IdeaForm = {
@@ -38,6 +42,7 @@ const EMPTY_FORM: IdeaForm = {
   notes: "",
   status: "captured",
   subject: "",
+  technicalCategory: "cloud_engineering",
 };
 
 function label(value: string): string {
@@ -47,16 +52,19 @@ function label(value: string): string {
 export function ContentIdeasWorkspace({
   evidenceOptions,
   evidenceUnavailable,
+  initialState,
 }: {
   evidenceOptions: readonly EvidenceOption[];
   evidenceUnavailable: boolean;
+  initialState: ContentWorkspaceState;
 }) {
   const router = useRouter();
-  const workspace = useContentWorkspace();
+  const workspace = useContentWorkspace(initialState);
   const [form, setForm] = useState<IdeaForm>(EMPTY_FORM);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | IdeaStatus>("all");
   const [formatFilter, setFormatFilter] = useState<"all" | ContentFormatId>("all");
+  const [importFeedback, setImportFeedback] = useState("");
 
   const filteredIdeas = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -71,7 +79,7 @@ export function ContentIdeasWorkspace({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const subject = form.subject.trim();
     const objective = form.educationalObjective.trim();
@@ -91,12 +99,14 @@ export function ContentIdeasWorkspace({
       formatId: form.formatId,
       id: previous?.id ?? `idea-${crypto.randomUUID()}`,
       notes: form.notes.trim(),
+      recordVersion: previous?.recordVersion ?? 1,
       status: form.status,
       subject,
+      technicalCategory: form.technicalCategory,
       updatedAt: now,
     };
-    workspace.saveIdea(idea);
-    setForm(EMPTY_FORM);
+    const result = await workspace.saveIdea(idea);
+    if (result.ok) setForm(EMPTY_FORM);
   }
 
   function edit(idea: ContentIdea) {
@@ -110,28 +120,19 @@ export function ContentIdeasWorkspace({
       notes: idea.notes,
       status: idea.status,
       subject: idea.subject,
+      technicalCategory: idea.technicalCategory,
     });
     document.getElementById("idea-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function openDraft(idea: ContentIdea) {
-    const draftId = workspace.createDraftFromIdea(idea);
-    router.push(`/studio?draft=${encodeURIComponent(draftId)}`);
-  }
-
-  if (!workspace.state) {
-    return <div className="studio-state" aria-live="polite">Opening the device-local ideas workspace…</div>;
+  async function openDraft(idea: ContentIdea) {
+    const draftId = await workspace.createDraftFromIdea(idea);
+    if (draftId) router.push(`/studio?draft=${encodeURIComponent(draftId)}`);
   }
 
   return (
     <div className="content-workspace">
-      <aside className="operator-notice">
-        <div>
-          <strong>Private device workspace</strong>
-          <p>Ideas are saved only in this browser. No server mutation route, public administration API, or AI provider is connected.</p>
-        </div>
-        <span className="status-chip status-safe">Local only</span>
-      </aside>
+      {workspace.legacyState ? <aside className="operator-notice"><div><strong>Browser workspace found</strong><p>{workspace.legacyState.ideas.length} ideas and {workspace.legacyState.drafts.length} drafts are available for explicit import. Preview: {[...workspace.legacyState.ideas.map((item) => item.subject), ...workspace.legacyState.drafts.map((item) => item.title || "Untitled draft")].slice(0, 5).join("; ") || "no named records"}. Export a backup first; the original browser records are retained.</p>{importFeedback ? <p className="field-note" aria-live="polite">{importFeedback}</p> : null}</div><div className="studio-actions"><button type="button" className="secondary-action" onClick={workspace.exportLegacy}>Export backup</button><button type="button" className="primary-action" disabled={workspace.busy} onClick={async () => { if (window.confirm("Import validated browser records? Existing database records with the same stable IDs will be skipped.")) { const result = await workspace.importLegacy(); const summary = result && "importResult" in result ? result.importResult : undefined; setImportFeedback(summary ? `Imported ${summary.imported}; skipped ${summary.skipped}; failed ${summary.failed}. Browser records were retained.` : result?.error ?? "Import was not completed."); } }}>Import browser records</button></div></aside> : null}
       {workspace.storageError ? <p className="studio-alert" role="alert">{workspace.storageError}</p> : null}
 
       <section className="studio-panel" id="idea-editor" aria-labelledby="idea-editor-heading">
@@ -146,6 +147,11 @@ export function ContentIdeasWorkspace({
           <label>Content format
             <select value={form.formatId} onChange={(event) => set("formatId", event.target.value as ContentFormatId)}>
               {CONTENT_FORMATS.map((format) => <option key={format.id} value={format.id}>{format.label}</option>)}
+            </select>
+          </label>
+          <label>Technical category
+            <select value={form.technicalCategory} onChange={(event) => set("technicalCategory", event.target.value as TechnicalCategory)}>
+              {TECHNICAL_CATEGORIES.map((value) => <option key={value} value={value}>{label(value)}</option>)}
             </select>
           </label>
           <label>Audience
@@ -186,7 +192,7 @@ export function ContentIdeasWorkspace({
             <textarea rows={4} maxLength={4000} value={form.notes} onChange={(event) => set("notes", event.target.value)} placeholder="Separate sourced facts, planned analogies, hypothetical examples, and questions that still need checking." />
           </label>
           <div className="studio-actions wide-field">
-            <button className="primary-action" type="submit">{form.id ? "Save revision" : "Save idea"}</button>
+            <button className="primary-action" disabled={workspace.busy} type="submit">{form.id ? "Save revision" : "Save idea"}</button>
             {form.id ? <button type="button" className="secondary-action" onClick={() => setForm(EMPTY_FORM)}>Cancel editing</button> : null}
           </div>
         </form>
@@ -218,9 +224,9 @@ export function ContentIdeasWorkspace({
                   </dl>
                   <div className="studio-actions">
                     <button type="button" className="secondary-action" onClick={() => edit(idea)}>Edit</button>
-                    {idea.status === "captured" ? <button type="button" className="secondary-action" onClick={() => workspace.updateIdeaStatus(idea.id, "approved")}>Approve idea</button> : null}
+                    {idea.status === "captured" ? <button type="button" className="secondary-action" disabled={workspace.busy} onClick={() => workspace.updateIdeaStatus(idea, "approved")}>Approve idea</button> : null}
                     {idea.status === "approved" || idea.status === "drafted" ? <button type="button" className="primary-action" onClick={() => openDraft(idea)}>Open in Studio</button> : null}
-                    {idea.status !== "archived" ? <button type="button" className="quiet-action" onClick={() => workspace.updateIdeaStatus(idea.id, "archived")}>Archive</button> : null}
+                    {idea.status !== "archived" ? <button type="button" className="quiet-action" disabled={workspace.busy} onClick={() => workspace.updateIdeaStatus(idea, "archived")}>Archive</button> : null}
                   </div>
                 </li>
               );

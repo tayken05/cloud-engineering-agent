@@ -4,7 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import { CONTENT_FORMATS, getContentFormat, type ContentFormatId } from "@/features/content-studio/content-formats";
 import { PLANNED_IMAGE_PROVIDERS } from "@/features/content-studio/image-provider";
-import type { ContentDraft, EvidenceOption } from "@/features/content-studio/content-types";
+import type { ContentDraft, ContentWorkspaceState, EvidenceOption } from "@/features/content-studio/content-types";
 import {
   countXCharacters,
   createDefaultVisual,
@@ -59,12 +59,14 @@ export function ContentStudioWorkspace({
   evidenceOptions,
   evidenceUnavailable,
   initialDraftId,
+  initialState,
 }: {
   evidenceOptions: readonly EvidenceOption[];
   evidenceUnavailable: boolean;
   initialDraftId?: string;
+  initialState: ContentWorkspaceState;
 }) {
-  const workspace = useContentWorkspace();
+  const workspace = useContentWorkspace(initialState);
   const [selectedId, setSelectedId] = useState(initialDraftId ?? "");
   const [draftEdits, setDraftEdits] = useState<Readonly<Record<string, ContentDraft>>>({});
   const [feedback, setFeedback] = useState<string>("");
@@ -108,26 +110,26 @@ export function ContentStudioWorkspace({
     } }));
   }
 
-  function newDraft() {
-    const id = workspace.createDraft("beginner-friendly-education");
-    setSelectedId(id);
-    setFeedback("New draft created in this browser.");
+  async function newDraft() {
+    const id = await workspace.createDraft("beginner-friendly-education");
+    if (id) { setSelectedId(id); setFeedback("New draft saved to the private workspace."); }
   }
 
-  function save(event?: FormEvent<HTMLFormElement>) {
+  async function save(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (!editing) return;
-    workspace.saveDraft(editing);
+    const result = await workspace.saveDraft(editing);
+    if (!result.ok) { setFeedback(result.error ?? "Save failed."); return; }
     setDraftEdits((current) => {
       const next: Record<string, ContentDraft> = { ...current };
       delete next[editing.id];
       return next;
     });
-    setFeedback("Draft saved locally. A revision checkpoint was added when the content changed.");
+    setFeedback("Draft saved to PostgreSQL. A revision checkpoint was added when the content changed.");
     setReviewProblems([]);
   }
 
-  function markReady() {
+  async function markReady() {
     if (!editing) return;
     const problems = validateDraft(editing);
     setReviewProblems(problems);
@@ -136,7 +138,8 @@ export function ContentStudioWorkspace({
       return;
     }
     const ready = { ...editing, status: "ready_for_review" as const };
-    workspace.saveDraft(ready);
+    const result = await workspace.saveDraft(ready);
+    if (!result.ok) { setFeedback(result.error ?? "Save failed."); return; }
     setDraftEdits((current) => {
       const next: Record<string, ContentDraft> = { ...current };
       delete next[editing.id];
@@ -159,14 +162,9 @@ export function ContentStudioWorkspace({
     }
   }
 
-  if (!workspace.state) return <div className="studio-state" aria-live="polite">Opening the device-local Content Studio…</div>;
-
   return (
     <div className="content-workspace">
-      <aside className="operator-notice">
-        <div><strong>Private device workspace</strong><p>Drafts and revisions stay in this browser. The server exposes no draft mutation endpoint, X publisher, Grok request, or image-generation call.</p></div>
-        <span className="status-chip status-safe">Human review required</span>
-      </aside>
+      <aside className="operator-notice"><div><strong>Persistent private drafting</strong><p>Saves complete on the server before confirmation. Version checks prevent a second browser session from silently replacing a newer draft.</p></div><span className="status-chip status-safe">Human review required</span></aside>
       {workspace.storageError ? <p className="studio-alert" role="alert">{workspace.storageError}</p> : null}
 
       <section className="draft-toolbar" aria-label="Draft selection">
@@ -175,7 +173,7 @@ export function ContentStudioWorkspace({
             {workspace.state.drafts.map((draft) => <option key={draft.id} value={draft.id}>{draft.title || "Untitled draft"} · {formatName(draft.status)}</option>)}
           </select>
         </label>
-        <button type="button" className="secondary-action" onClick={newDraft}>New blank draft</button>
+        <button type="button" className="secondary-action" disabled={workspace.busy} onClick={newDraft}>New blank draft</button>
       </section>
 
       {editing && format ? (
@@ -256,13 +254,15 @@ export function ContentStudioWorkspace({
 
             {reviewProblems.length > 0 ? <div className="review-problems" role="alert"><strong>Review checks</strong><ul>{reviewProblems.map((problem) => <li key={problem}>{problem}</li>)}</ul></div> : null}
             <div className="studio-actions">
-              <button className="primary-action" type="submit">Save draft</button>
-              <button className="secondary-action" type="button" onClick={markReady}>Mark ready for review</button>
+              <button className="primary-action" disabled={workspace.busy} type="submit">Save draft</button>
+              <button className="secondary-action" disabled={workspace.busy} type="button" onClick={markReady}>Mark ready for review</button>
               <button className="secondary-action" type="button" onClick={copyDraft}>Copy finished text</button>
               <button className="quiet-action" type="button" onClick={() => update("visual", editing.visual ? null : createDefaultVisual(editing.title))}>{editing.visual ? "Remove visual" : "Add visual"}</button>
             </div>
             <p className="field-note" aria-live="polite">{feedback || `${editing.revisions.length} saved revision checkpoint${editing.revisions.length === 1 ? "" : "s"}. Last saved ${formatDate(editing.updatedAt)}.`}</p>
           </form>
+
+          {editing.revisions.length > 0 ? <section className="studio-panel" aria-labelledby="revision-history-heading"><div className="studio-panel-heading"><div><p className="eyebrow">Recovery</p><h2 id="revision-history-heading">Revision history</h2></div><span className="status-chip">{editing.revisions.length} checkpoints</span></div><ol className="revision-list">{editing.revisions.map((revision) => <li key={revision.id}><span>Version {revision.version} · {formatDate(revision.savedAt)}</span><button type="button" className="secondary-action" disabled={workspace.busy} onClick={async () => { if (window.confirm("Restore this revision as a new saved version?")) { const result = await workspace.restoreRevision(editing.id, revision.id, editing.recordVersion); setFeedback(result.error ?? (result.ok ? "Revision restored as the latest version." : "Restore failed.")); setDraftEdits({}); } }}>Restore</button></li>)}</ol></section> : null}
 
           <XPreview draft={editing} />
 

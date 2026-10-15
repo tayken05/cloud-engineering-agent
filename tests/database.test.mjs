@@ -12,6 +12,10 @@ import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { getDatabaseUrl } from "../src/server/db/environment.ts";
 import {
   collectionRuns,
+  contentDraftRevisions,
+  contentDrafts,
+  contentIdeas,
+  contentVisualSpecifications,
   jobEmployers,
   jobDiscoveryRuns,
   jobs,
@@ -112,6 +116,7 @@ test("migration history contains only reviewed additive schema entries", async (
     "0001_collection_runs",
     "0002_jobs_opportunities",
     "0003_job_discovery",
+    "0004_content_workspace",
   ]);
   for (const entry of journal.entries) {
     const migration = await readFile(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8");
@@ -168,10 +173,29 @@ test("the jobs migration matches fresh offline generation from the monitoring sn
 
 test("the job-discovery migration matches fresh offline generation", async () => {
   const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0002_snapshot.json", import.meta.url), "utf8"));
-  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const discoverySnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0003_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, discoverySnapshot);
   const migration = await readFile(new URL("../drizzle/0003_job_discovery.sql", import.meta.url), "utf8");
   const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the content workspace migration matches fresh offline generation", async () => {
+  const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0003_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const migration = await readFile(new URL("../drizzle/0004_content_workspace.sql", import.meta.url), "utf8");
+  const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
+  assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the content snapshot matches owner-scoped declarations", async () => {
+  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0004_snapshot.json", import.meta.url), "utf8"));
+  for (const table of [contentIdeas, contentDrafts, contentDraftRevisions, contentVisualSpecifications]) {
+    const declared = getTableConfig(table);
+    const stored = snapshot.tables[`public.${declared.name}`];
+    assert.ok(stored);
+    assert.deepEqual(Object.keys(stored.columns).sort(), declared.columns.map((column) => column.name).sort());
+  }
 });
 
 test("the discovery snapshot matches lifecycle columns and monitoring table", async () => {

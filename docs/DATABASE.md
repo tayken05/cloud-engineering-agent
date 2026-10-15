@@ -1,6 +1,6 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the initial migration to development and production. Task 7 adds durable collection monitoring, and Task 9 adds the Jobs & Opportunities model through a separate forward migration. The only application write route is the production-only, secret-authenticated news Cron handler; job population remains operator-only with no browser or public administrative write interface.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the initial migration to development and production. Later forward migrations add collection monitoring, Jobs & Opportunities, job discovery, and the Task 12 private content workspace. Public writes remain unavailable; content mutations require a managed-auth session plus the exact configured owner user ID.
 
 ## Dependencies and boundaries
 
@@ -41,6 +41,12 @@ erDiagram
 | `stories` | Distinct developments that may be reported by several publishers | Generated UUID; unique stable `deduplication_key`; title, optional summary/topic/development occurrence time; verification fields; archival timestamp |
 | `story_source_items` | Many-to-many links between developments and their evidence | Composite primary key `(story_id, source_item_id)`; evidence role (`supports`, `contradicts`, or `context`), notes, link timestamp |
 | `collection_runs` | Durable monitoring and concurrency state for scheduled/manual collection | Generated UUID; trigger/status; bounded lease token/expiry; start/finish times; processed and failed source keys; inserted/updated/unchanged counts; safe failure code |
+| `content_ideas` | Owner-scoped educational topic planning | Stable import-safe ID; owner ID; category; one of 20 formats; audience, objective, engagement and approval state; optimistic `record_version` |
+| `content_idea_source_items` | Optional publisher evidence for an idea | Composite identity; owner-consistent idea FK; restrictive collected-evidence FK |
+| `content_drafts` | Owner-scoped X draft, thread and poll content | Stable ID; optional owner-consistent idea FK; text/thread/poll fields; editorial state; optimistic `record_version` |
+| `content_draft_source_items` | Optional publisher evidence for a draft | Composite identity; owner-consistent draft FK; restrictive evidence FK |
+| `content_draft_revisions` | Recoverable prior draft snapshots | Generated UUID; owner-consistent draft FK; unique draft/version checkpoint; bounded JSON object snapshot |
+| `content_visual_specifications` | Editable definitions for six deterministic visual templates | Owner-consistent one-to-one draft FK; enforced 1080×1080 or 1600×900 dimensions; no PNG/base64 payload |
 
 All tables have timezone-aware `created_at` and `updated_at`. Writers must set `updated_at` explicitly on mutation; defaults initialize new rows, and no SQL triggers or ORM update hooks are installed. A story's `occurred_at` differs from a publisher's `published_at`; neither is inferred from collection time. Unknown publication times, topics, item kinds, and reliability remain NULL rather than being invented.
 
@@ -112,6 +118,8 @@ The guarded Task 8 production run processed all 12 publishers successfully, inse
 ## Environment configuration
 
 `DATABASE_URL` is the pooled server-only Neon URL used for application queries and scheduled transactions. `DATABASE_URL_UNPOOLED` is the direct server-only URL reserved for separately authorized migration or session-level work. `CRON_SECRET` is a production-only Vercel Secret used solely for Cron authorization. `.env.example` contains empty placeholders only; no live value is necessary for generation, offline tests, type checking, or builds. Actual `.env*` files remain ignored, with a narrow exception for `.env.example`. Never use `NEXT_PUBLIC_*` database or Cron variables or include credentials in configuration files, errors, migration files, logs, or client bundles.
+
+Task 12 adds server-only `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET`, and `OWNER_AUTH_USER_ID`. Authentication and owner authorization are separate checks: a valid managed session does not grant content access unless its stable user ID exactly matches the allowlist. The content query layer includes `owner_id` in every read and write. Record versions reject stale edits. `0004_content_workspace.sql` is applied to development and production; it created only six public application tables and eight enums, recorded the fifth Drizzle history entry, and left the nine-table `neon_auth` catalog unchanged.
 
 The local `.env.local` contains both development connection settings and remains ignored and untracked. The URLs match the expected development endpoint and `neondb`. Runtime Sources/Stories reads use pooled `DATABASE_URL`; guarded administrative registration and ingestion use the direct value. Production administration reuses only the dedicated production credential file. No value is copied to source files or documentation.
 

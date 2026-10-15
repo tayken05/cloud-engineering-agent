@@ -4,6 +4,7 @@ import {
   boolean,
   char,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -68,6 +69,24 @@ export const salaryPayPeriod = pgEnum("salary_pay_period", [
 export const jobClosureReason = pgEnum("job_closure_reason", [
   "repeated_absence", "application_deadline", "explicit_provider_closure",
 ]);
+export const contentFormat = pgEnum("content_format", [
+  "historical-first-principles", "real-world-analogies", "things-you-probably-didnt-know",
+  "breaking-technology-updates", "beginner-friendly-education", "deep-technical-education",
+  "practical-tutorials", "troubleshooting-challenges", "architecture-discussions", "ask-grok",
+  "myths-vs-facts", "tech-humor-memes", "polls-interactive-questions", "engineering-observations",
+  "careers-opportunities", "projects-hands-on-challenges", "technical-comparisons", "visual-education",
+  "community-engagement", "threads-learning-series",
+]);
+export const contentAudience = pgEnum("content_audience", ["beginner", "intermediate", "advanced", "mixed"]);
+export const contentIdeaStatus = pgEnum("content_idea_status", ["captured", "approved", "drafted", "archived"]);
+export const contentEngagementStyle = pgEnum("content_engagement_style", ["teach", "discuss", "challenge", "ask", "entertain"]);
+export const contentDraftStatus = pgEnum("content_draft_status", ["draft", "ready_for_review"]);
+export const contentVisualTemplate = pgEnum("content_visual_template", [
+  "cloud-architecture", "network-troubleshooting", "educational-fact", "technical-comparison",
+  "question-answer", "visual-analogy",
+]);
+export const contentVisualAspect = pgEnum("content_visual_aspect", ["square", "landscape"]);
+export const contentVisualAccent = pgEnum("content_visual_accent", ["blue", "cyan", "violet", "amber"]);
 
 const auditColumns = () => ({
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -400,6 +419,118 @@ export const jobDiscoveryRuns = pgTable("job_discovery_runs", {
   check("job_discovery_runs_finished_after_start", sql`${table.finishedAt} IS NULL OR ${table.finishedAt} >= ${table.startedAt}`),
 ]);
 
+export const contentIdeas = pgTable("content_ideas", {
+  id: varchar("id", { length: 128 }).primaryKey(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  subject: varchar("subject", { length: 300 }).notNull(),
+  technicalCategory: intelligenceTopic("technical_category").default("cloud_engineering").notNull(),
+  formatId: contentFormat("format_id").notNull(),
+  audience: contentAudience("audience").notNull(),
+  educationalObjective: varchar("educational_objective", { length: 1000 }).notNull(),
+  engagementStyle: contentEngagementStyle("engagement_style").notNull(),
+  notes: varchar("notes", { length: 4000 }).default("").notNull(),
+  status: contentIdeaStatus("status").default("captured").notNull(),
+  recordVersion: integer("record_version").default(1).notNull(),
+  ...auditColumns(),
+}, (table) => [
+  unique("content_ideas_id_owner_unique").on(table.id, table.ownerId),
+  unique("content_ideas_owner_subject_unique").on(table.ownerId, table.subject),
+  index("content_ideas_owner_updated_idx").on(table.ownerId, table.updatedAt),
+  index("content_ideas_owner_status_format_idx").on(table.ownerId, table.status, table.formatId),
+  check("content_ideas_id_format", sql`${table.id} ~ '^(idea|starter-idea)-[a-z0-9-]+$'`),
+  check("content_ideas_owner_not_blank", sql`length(btrim(${table.ownerId})) > 0`),
+  check("content_ideas_subject_not_blank", sql`length(btrim(${table.subject})) > 0`),
+  check("content_ideas_objective_not_blank", sql`length(btrim(${table.educationalObjective})) > 0`),
+  check("content_ideas_version_positive", sql`${table.recordVersion} > 0`),
+]);
+
+export const contentIdeaSourceItems = pgTable("content_idea_source_items", {
+  ideaId: varchar("idea_id", { length: 128 }).notNull(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  sourceItemId: uuid("source_item_id").notNull().references(() => sourceItems.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ name: "content_idea_source_items_pk", columns: [table.ideaId, table.sourceItemId] }),
+  foreignKey({ name: "content_idea_source_items_owner_fk", columns: [table.ideaId, table.ownerId], foreignColumns: [contentIdeas.id, contentIdeas.ownerId] }).onDelete("cascade"),
+  index("content_idea_source_items_owner_idx").on(table.ownerId, table.ideaId),
+  index("content_idea_source_items_source_idx").on(table.sourceItemId),
+]);
+
+export const contentDrafts = pgTable("content_drafts", {
+  id: varchar("id", { length: 128 }).primaryKey(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  ideaId: varchar("idea_id", { length: 128 }),
+  formatId: contentFormat("format_id").notNull(),
+  title: varchar("title", { length: 300 }).default("").notNull(),
+  caption: varchar("caption", { length: 4000 }).default("").notNull(),
+  explanation: varchar("explanation", { length: 12000 }).default("").notNull(),
+  moderatorNotes: varchar("moderator_notes", { length: 6000 }).default("").notNull(),
+  threadPosts: text("thread_posts").array().default(sql`'{}'::text[]`).notNull(),
+  pollOptions: text("poll_options").array().default(sql`'{}'::text[]`).notNull(),
+  status: contentDraftStatus("status").default("draft").notNull(),
+  recordVersion: integer("record_version").default(1).notNull(),
+  ...auditColumns(),
+}, (table) => [
+  unique("content_drafts_id_owner_unique").on(table.id, table.ownerId),
+  unique("content_drafts_owner_idea_unique").on(table.ownerId, table.ideaId),
+  foreignKey({ name: "content_drafts_idea_owner_fk", columns: [table.ideaId, table.ownerId], foreignColumns: [contentIdeas.id, contentIdeas.ownerId] }).onDelete("restrict"),
+  index("content_drafts_owner_updated_idx").on(table.ownerId, table.updatedAt),
+  index("content_drafts_owner_status_idx").on(table.ownerId, table.status),
+  check("content_drafts_id_format", sql`${table.id} ~ '^(draft|starter-draft)-[a-z0-9-]+$'`),
+  check("content_drafts_owner_not_blank", sql`length(btrim(${table.ownerId})) > 0`),
+  check("content_drafts_thread_limit", sql`cardinality(${table.threadPosts}) <= 20`),
+  check("content_drafts_poll_limit", sql`cardinality(${table.pollOptions}) <= 4`),
+  check("content_drafts_version_positive", sql`${table.recordVersion} > 0`),
+]);
+
+export const contentDraftSourceItems = pgTable("content_draft_source_items", {
+  draftId: varchar("draft_id", { length: 128 }).notNull(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  sourceItemId: uuid("source_item_id").notNull().references(() => sourceItems.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ name: "content_draft_source_items_pk", columns: [table.draftId, table.sourceItemId] }),
+  foreignKey({ name: "content_draft_source_items_owner_fk", columns: [table.draftId, table.ownerId], foreignColumns: [contentDrafts.id, contentDrafts.ownerId] }).onDelete("cascade"),
+  index("content_draft_source_items_owner_idx").on(table.ownerId, table.draftId),
+  index("content_draft_source_items_source_idx").on(table.sourceItemId),
+]);
+
+export const contentDraftRevisions = pgTable("content_draft_revisions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  draftId: varchar("draft_id", { length: 128 }).notNull(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  draftVersion: integer("draft_version").notNull(),
+  snapshot: jsonb("snapshot").$type<Readonly<Record<string, unknown>>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  foreignKey({ name: "content_draft_revisions_owner_fk", columns: [table.draftId, table.ownerId], foreignColumns: [contentDrafts.id, contentDrafts.ownerId] }).onDelete("cascade"),
+  unique("content_draft_revisions_version_unique").on(table.draftId, table.draftVersion),
+  index("content_draft_revisions_owner_draft_idx").on(table.ownerId, table.draftId, table.createdAt),
+  check("content_draft_revisions_version_positive", sql`${table.draftVersion} > 0`),
+  check("content_draft_revisions_snapshot_object", sql`jsonb_typeof(${table.snapshot}) = 'object'`),
+]);
+
+export const contentVisualSpecifications = pgTable("content_visual_specifications", {
+  draftId: varchar("draft_id", { length: 128 }).primaryKey(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  templateId: contentVisualTemplate("template_id").notNull(),
+  aspect: contentVisualAspect("aspect").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  accent: contentVisualAccent("accent").notNull(),
+  title: varchar("title", { length: 180 }).default("").notNull(),
+  subtitle: varchar("subtitle", { length: 280 }).default("").notNull(),
+  caption: varchar("caption", { length: 240 }).default("").notNull(),
+  footer: varchar("footer", { length: 120 }).default("").notNull(),
+  leftLabel: varchar("left_label", { length: 80 }).default("").notNull(),
+  rightLabel: varchar("right_label", { length: 80 }).default("").notNull(),
+  ...auditColumns(),
+}, (table) => [
+  foreignKey({ name: "content_visual_specifications_owner_fk", columns: [table.draftId, table.ownerId], foreignColumns: [contentDrafts.id, contentDrafts.ownerId] }).onDelete("cascade"),
+  index("content_visual_specifications_owner_idx").on(table.ownerId, table.updatedAt),
+  check("content_visual_specifications_dimensions", sql`(${table.aspect} = 'square' AND ${table.width} = 1080 AND ${table.height} = 1080) OR (${table.aspect} = 'landscape' AND ${table.width} = 1600 AND ${table.height} = 900)`),
+]);
+
 export const sourcesRelations = relations(sources, ({ many }) => ({ items: many(sourceItems) }));
 export const sourceItemsRelations = relations(sourceItems, ({ one, many }) => ({
   source: one(sources, { fields: [sourceItems.sourceId], references: [sources.id] }),
@@ -417,6 +548,15 @@ export const jobSourcesRelations = relations(jobSources, ({ one, many }) => ({
 }));
 export const jobsRelations = relations(jobs, ({ one }) => ({
   source: one(jobSources, { fields: [jobs.sourceId], references: [jobSources.id] }),
+}));
+export const contentIdeasRelations = relations(contentIdeas, ({ many }) => ({ evidence: many(contentIdeaSourceItems), drafts: many(contentDrafts) }));
+export const contentIdeaSourceItemsRelations = relations(contentIdeaSourceItems, ({ one }) => ({
+  idea: one(contentIdeas, { fields: [contentIdeaSourceItems.ideaId], references: [contentIdeas.id] }),
+  sourceItem: one(sourceItems, { fields: [contentIdeaSourceItems.sourceItemId], references: [sourceItems.id] }),
+}));
+export const contentDraftsRelations = relations(contentDrafts, ({ one, many }) => ({
+  idea: one(contentIdeas, { fields: [contentDrafts.ideaId], references: [contentIdeas.id] }),
+  evidence: many(contentDraftSourceItems), revisions: many(contentDraftRevisions), visual: one(contentVisualSpecifications),
 }));
 
 export type Source = typeof sources.$inferSelect;
@@ -437,3 +577,7 @@ export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
 export type JobDiscoveryRun = typeof jobDiscoveryRuns.$inferSelect;
 export type NewJobDiscoveryRun = typeof jobDiscoveryRuns.$inferInsert;
+export type ContentIdeaRow = typeof contentIdeas.$inferSelect;
+export type NewContentIdeaRow = typeof contentIdeas.$inferInsert;
+export type ContentDraftRow = typeof contentDrafts.$inferSelect;
+export type NewContentDraftRow = typeof contentDrafts.$inferInsert;

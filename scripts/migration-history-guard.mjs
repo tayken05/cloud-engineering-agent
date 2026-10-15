@@ -2,6 +2,7 @@ import { collectionRunsMigrationConfig } from "./collection-runs-migration.confi
 import { productionMigrationConfig } from "./production-migration.config.mjs";
 import { jobsMigrationConfig } from "./jobs-migration.config.mjs";
 import { jobDiscoveryMigrationConfig } from "./job-discovery-migration.config.mjs";
+import { contentWorkspaceMigrationConfig } from "./content-workspace-migration.config.mjs";
 
 export const approvedMigrationHistory = Object.freeze([
   Object.freeze({
@@ -19,6 +20,10 @@ export const approvedMigrationHistory = Object.freeze([
   Object.freeze({
     hash: jobDiscoveryMigrationConfig.migrationSha256,
     timestamp: jobDiscoveryMigrationConfig.migrationTimestamp,
+  }),
+  Object.freeze({
+    hash: contentWorkspaceMigrationConfig.migrationSha256,
+    timestamp: contentWorkspaceMigrationConfig.migrationTimestamp,
   }),
 ]);
 

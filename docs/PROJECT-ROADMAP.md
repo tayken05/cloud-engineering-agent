@@ -166,3 +166,11 @@ Vercel hosts the visual shell as recorded in Task 3B. Future deployment and oper
 ## Completion gate for each authorized task
 
 Read existing documentation, implement only assigned scope, test meaningful behavior, run lint/type checking/production build, verify the relevant user flow, report errors and warnings, and stop for review. Do not interpret this roadmap as permission to install dependencies, deploy, publish, or modify external services.
+## Task 12: Private owner authentication and persistent content — implemented, owner enrollment pending
+
+- Integrated managed Neon Auth with sign-in/sign-out, session expiration behavior, safe return paths, disabled public registration, and exact server-side owner allowlisting.
+- Protected `/ideas` and `/studio` without changing public News, Sources, Jobs, Learning Series, dashboard, or Cron behavior.
+- Added forward migration `0004_content_workspace.sql` for owner-scoped ideas, drafts, evidence links, revision history, and visual specifications. Development and production migrations are applied and verified; managed Auth is unchanged.
+- Replaced local-only saves with PostgreSQL transactions, bounded validation, owner checks, optimistic concurrency, revision restore, cross-device retrieval, and server-confirmed save states.
+- Added previewed one-time browser import, JSON backup, stable-ID duplicate prevention, and retained local source records.
+- Configured the production cookie-signing Secret. Final owner enrollment and `OWNER_AUTH_USER_ID` configuration require the project owner's one-time managed Auth account action; access fails closed until completed. A separate development Auth endpoint also remains to be provisioned or verified before development-login testing.

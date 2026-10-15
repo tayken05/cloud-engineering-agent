@@ -22,6 +22,8 @@
     "test:jobs:development": "node --conditions=react-server scripts/jobs-development-verification.mjs",
     "test:jobs:http": "node --test tests/jobs-http.test.mjs",
     "test:content": "node --test tests/content-studio.test.mjs",
+    "test:auth": "node --conditions=react-server --test tests/auth-owner.test.mjs tests/content-workspace-migration-guard.test.mjs",
+    "test:content:development": "node --conditions=react-server scripts/content-workspace-development-verification.mjs",
     "test:content:http": "node --test tests/content-http.test.mjs",
     "test:scheduler:development": "node --conditions=react-server scripts/scheduler-development-verification.mjs",
     "test:news:http": "node --test tests/news-http.test.mjs",
@@ -38,6 +40,8 @@
     "db:migrate:jobs:production": "node scripts/jobs-migration.mjs --production",
     "db:migrate:job-discovery:development": "node scripts/job-discovery-migration.mjs --development",
     "db:migrate:job-discovery:production": "node scripts/job-discovery-migration.mjs --production",
+    "db:migrate:content-workspace:development": "node scripts/content-workspace-migration.mjs --development",
+    "db:migrate:content-workspace:production": "node scripts/content-workspace-migration.mjs --production",
     "db:discover:jobs:development": "node --conditions=react-server scripts/job-discovery.mjs --development",
     "db:discover:jobs:production": "node --conditions=react-server scripts/job-discovery.mjs --production",
     "db:import:jobs:development": "node --conditions=react-server scripts/jobs-import.mjs --development",
@@ -46,6 +50,7 @@
     "db:migrate:production": "node scripts/production-migration.mjs"
   },
   "dependencies": {
+    "@neondatabase/auth": "0.6.0-beta",
     "@neondatabase/serverless": "1.2.0",
     "drizzle-orm": "0.45.4",
     "fast-xml-parser": "5.11.2",

@@ -8,8 +8,6 @@ const routes = [
   ["/tech-hub", "My Tech Intelligence", "Coming in a future phase"],
   ["/trending", "Trending", "Coming in a future phase"],
   ["/stories", "Stories &amp; News", "Collected publisher updates"],
-  ["/ideas", "Content Ideas", "Opening the device-local ideas workspace"],
-  ["/studio", "Content Studio", "Opening the device-local Content Studio"],
   ["/learning-series", "Learning Series", "Two independent teaching styles"],
   ["/posts", "Published Posts", "Coming in a future phase"],
   ["/inbox", "Inbox", "Coming in a future phase"],

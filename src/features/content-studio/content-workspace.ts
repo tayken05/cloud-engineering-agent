@@ -4,6 +4,7 @@ import {
   DRAFT_STATUSES,
   ENGAGEMENT_STYLES,
   IDEA_STATUSES,
+  TECHNICAL_CATEGORIES,
   VISUAL_ASPECTS,
   VISUAL_TEMPLATES,
   type ContentDraft,
@@ -120,8 +121,10 @@ function parseIdea(value: unknown, fallbackTime: string): ContentIdea | null {
     formatId: member(value.formatId, CONTENT_FORMAT_IDS, "beginner-friendly-education"),
     id,
     notes: text(value.notes, 4000),
+    recordVersion: typeof value.recordVersion === "number" && value.recordVersion > 0 ? Math.floor(value.recordVersion) : 1,
     status: member(value.status, IDEA_STATUSES, "captured"),
     subject,
+    technicalCategory: member(value.technicalCategory, TECHNICAL_CATEGORIES, "cloud_engineering"),
     updatedAt: iso(value.updatedAt, fallbackTime),
   };
 }
@@ -133,7 +136,7 @@ function parseDraft(value: unknown, fallbackTime: string): ContentDraft | null {
   const snapshot = snapshotFrom(value);
   const revisions = Array.isArray(value.revisions) ? value.revisions.slice(-MAX_REVISIONS).flatMap((item) => {
     if (!isRecord(item) || !isRecord(item.snapshot)) return [];
-    return [{ id: text(item.id, 128), savedAt: iso(item.savedAt, fallbackTime), snapshot: snapshotFrom(item.snapshot) }];
+    return [{ id: text(item.id, 128), savedAt: iso(item.savedAt, fallbackTime), snapshot: snapshotFrom(item.snapshot), version: typeof item.version === "number" && item.version > 0 ? Math.floor(item.version) : 1 }];
   }) : [];
   return {
     ...snapshot,
@@ -142,6 +145,7 @@ function parseDraft(value: unknown, fallbackTime: string): ContentDraft | null {
     formatId: member(value.formatId, CONTENT_FORMAT_IDS, "beginner-friendly-education"),
     id,
     ideaId: typeof value.ideaId === "string" ? value.ideaId.slice(0, 128) : null,
+    recordVersion: typeof value.recordVersion === "number" && value.recordVersion > 0 ? Math.floor(value.recordVersion) : 1,
     revisions,
     status: member(value.status, DRAFT_STATUSES, "draft"),
     updatedAt: iso(value.updatedAt, fallbackTime),
@@ -198,21 +202,21 @@ export function createStarterWorkspace(): ContentWorkspaceState {
       educationalObjective: "Explain why a distributed naming system replaced a centrally maintained host file.",
       engagementStyle: "teach", evidence: [], formatId: "historical-first-principles",
       id: "starter-idea-dns-history", notes: "Evergreen starter. Add primary historical references before publication.",
-      status: "approved", subject: "From HOSTS.TXT to the Domain Name System", updatedAt: now,
+      recordVersion: 1, status: "approved", subject: "From HOSTS.TXT to the Domain Name System", technicalCategory: "networking", updatedAt: now,
     },
     {
       audience: "beginner", createdAt: now,
       educationalObjective: "Build intuition for routing, security boundaries, and tenancy inside a virtual network.",
       engagementStyle: "discuss", evidence: [], formatId: "real-world-analogies",
       id: "starter-idea-vpc-analogy", notes: "State clearly that the business-park analogy does not model packet forwarding by itself.",
-      status: "approved", subject: "A VPC as a gated business park", updatedAt: now,
+      recordVersion: 1, status: "approved", subject: "A VPC as a gated business park", technicalCategory: "cloud_engineering", updatedAt: now,
     },
     {
       audience: "intermediate", createdAt: now,
       educationalObjective: "Help engineers isolate name-resolution failures before changing unrelated network controls.",
       engagementStyle: "challenge", evidence: [], formatId: "ask-grok",
       id: "starter-idea-dns-challenge", notes: "Use invented example addresses only. Keep the diagnosis in moderator notes.",
-      status: "drafted", subject: "The IP works, but the hostname fails", updatedAt: now,
+      recordVersion: 1, status: "drafted", subject: "The IP works, but the hostname fails", technicalCategory: "networking", updatedAt: now,
     },
   ];
   const drafts: ContentDraft[] = [
@@ -222,7 +226,7 @@ export function createStarterWorkspace(): ContentWorkspaceState {
       explanation: "The visual separates reachability from name resolution. The prompt asks for evidence before a configuration change.",
       formatId: "ask-grok", id: "starter-draft-dns-challenge", ideaId: "starter-idea-dns-challenge",
       moderatorNotes: "Expected direction: inspect DNS resolution, resolver configuration, query response, and relevant DNS records. An IP test alone does not validate DNS.",
-      pollOptions: [], revisions: [], status: "draft", threadPosts: [], title: "Reachable by IP. Missing by name.", updatedAt: now,
+      pollOptions: [], recordVersion: 1, revisions: [], status: "draft", threadPosts: [], title: "Reachable by IP. Missing by name.", updatedAt: now,
       visual: {
         accent: "cyan", aspect: "landscape", caption: "Where would you look first?",
         footer: "Cloud Engineering Agent · Troubleshooting challenge", leftLabel: "203.0.113.20 responds",
@@ -250,7 +254,7 @@ export function blankDraft(formatId: ContentFormatId, now: string, id: string): 
   const format = getContentFormat(formatId);
   return {
     caption: "", createdAt: now, evidence: [], explanation: "", formatId, id, ideaId: null,
-    moderatorNotes: "", pollOptions: format.mode === "poll" ? ["", ""] : [], revisions: [],
+    moderatorNotes: "", pollOptions: format.mode === "poll" ? ["", ""] : [], recordVersion: 1, revisions: [],
     status: "draft", threadPosts: format.mode === "thread" ? ["", ""] : [], title: "", updatedAt: now, visual: null,
   };
 }

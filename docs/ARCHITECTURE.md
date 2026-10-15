@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the deployed application includes the responsive shell, 12-source daily news collector, a public Jobs & Opportunities Hub with daily employer-board discovery, and a device-local Educational Content Studio. Story grouping, authenticated accounts, durable private content, publishing, and engagement workflows remain planned.
+Status: the deployed application includes the responsive shell, 12-source daily news collector, a public Jobs & Opportunities Hub with daily employer-board discovery, and an owner-authenticated PostgreSQL-backed Educational Content Studio. Final owner enrollment is pending; story grouping, publishing, and engagement workflows remain planned.
 
 ## Current application
 
@@ -11,7 +11,7 @@ Status: the deployed application includes the responsive shell, 12-source daily 
 - `@/*` resolves to `src/*`.
 - Root configuration contains Next.js, TypeScript, and ESLint settings.
 - `docs/` contains product requirements, roadmap, architecture, and decisions. Root `AGENTS.md` governs coding-agent work.
-- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata, `/stories` lists collected publisher updates, and `/jobs` plus `/jobs/[slug]` present verified employer vacancies from PostgreSQL. `/ideas`, `/studio`, and `/learning-series` implement the first educational-content workflow. The remaining feature routes stay descriptive empty states. Verified story creation, engagement, durable private-data workflows, and authentication remain planned.
+- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata, `/stories` lists collected publisher updates, and `/jobs` plus `/jobs/[slug]` present verified employer vacancies from PostgreSQL. `/ideas` and `/studio` are private, persistent owner workspaces; `/learning-series` remains public. The remaining feature routes stay descriptive empty states. Verified story creation, engagement, and publishing remain planned.
 
 ## Implemented application shell
 
@@ -22,7 +22,7 @@ Status: the deployed application includes the responsive shell, 12-source daily 
 - Desktop sidebar at widths of 1024px and above; native expandable mobile navigation below that breakpoint, with Escape dismissal and closure after link activation. Dashboard cards become one column below 640px.
 - Semantic header/navigation/main/footer, a skip link, visible keyboard focus, labelled theme selector, and `aria-current` active navigation indicators.
 - Appearance offers system/light/dark, follows system changes, persists a validated preference under `cloud-agent-theme-v1`, and synchronizes across tabs. Blocked storage falls back to in-memory preferences. A small static head script resolves the theme before paint; hydration suppression is limited to the expected root theme-attribute difference. CSS honors system appearance even without JavaScript.
-- The hub is a public placeholder without private information. Authentication must precede private-data functionality. Theme preference is local browser UI state, not an account setting.
+- The hub is a public placeholder without private information. Theme preference remains local browser UI state, not an account setting. Managed owner authentication applies only to the private content workspaces in this phase.
 
 ## Production hosting — Task 3B
 
@@ -154,3 +154,12 @@ Keep secrets outside source control and server-side; ignore environment files, p
 ## Verification strategy
 
 Run `npm run lint`, `npm run typecheck`, and `npm run build` after changes. Confirm development startup, HTTP success for all twelve routes, active navigation, mobile menu operation, theme persistence/system appearance, and responsive rendering. `tests/shell.test.mjs` uses Node's built-in runner for HTTP route/landmark checks and unknown-route behavior against a running local server (`npm run test:shell`, default port 3100). Use browser automation for shell interactions; no additional test-framework dependency is installed. Add durable behavior tests alongside future business features. Do not suppress errors, ignore build failures, or add assertions that merely mirror implementation.
+## Task 12: Owner-authenticated persistent content workspace
+
+`@neondatabase/auth` integrates the existing managed Neon Auth service through `/api/auth/[...path]`. The dependency is pinned to `0.6.0-beta` because Neon has not published a stable generation of its current managed-auth SDK. This explicit provider constraint is the only exception to the stable-dependency preference and must be reviewed when Neon publishes a stable compatible release. The integration follows Neon's [Next.js API-only quick start](https://neon.com/docs/auth/quick-start/nextjs-api-only). It does not host a separate Better Auth server and never writes the managed `neon_auth` schema.
+
+`src/proxy.ts` places an authentication boundary around `/ideas` and `/studio`; each page and every Server Action independently resolves the server session and compares its stable user ID with `OWNER_AUTH_USER_ID`. Public registration is unavailable, authenticated non-owners are sent to an access-denied page, and missing configuration fails closed. Public News, Sources, Jobs, Learning Series, and dashboard routes are unchanged. Private pages are dynamically rendered and are never placed in a public cache.
+
+Content persistence lives in `src/server/content/workspace-repository.ts`. Its transaction-scoped reads and writes always include the owner ID. Ideas and drafts use record versions for optimistic concurrency; draft changes preserve the prior state as a revision before updating. The six visual templates store compact editable specifications and continue to render/export PNGs in the browser. No binary media is stored in PostgreSQL or Vercel's temporary filesystem.
+
+The browser migration reads only the existing versioned Task 11 storage key, applies its bounded parser, reports available records, offers a JSON backup, and imports only after explicit confirmation. Stable IDs make repeats idempotent. Existing database IDs are skipped and browser data remains untouched. Cross-device synchronization uses request-time PostgreSQL retrieval after authentication; server confirmation precedes save success.

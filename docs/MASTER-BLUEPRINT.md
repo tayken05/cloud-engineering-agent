@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: the deployed platform includes the intelligence schema, 12-source daily news collector, a public database-backed Jobs & Opportunities Hub, and the first device-local Educational Content Studio. Task 10 continuously verifies 483 relevant vacancies across seven official employer boards. Task 11 supports all 20 content formats and deterministic visual creation without AI billing or X publishing. Applications, accounts, verified-talent workflows, AI-assisted generation, and X integrations remain planned.
+Status: the deployed platform includes the intelligence schema, 12-source daily news collector, a public database-backed Jobs & Opportunities Hub, and an owner-authenticated persistent Educational Content Studio. Task 10 continuously verifies relevant vacancies across seven official employer boards. Tasks 11–12 preserve all 20 content formats, deterministic visual creation, revision history, and cross-device storage without AI billing or X publishing. Final owner enrollment, verified-talent workflows, AI-assisted generation, and X integrations remain planned.
 Recorded: 2026-10-15.
 
 ## Vision and boundaries
@@ -132,3 +132,6 @@ These are directions, not finalized integration designs or commitments to paid s
 ## Task 1 acceptance boundary
 
 Initialize the official scaffold, permanent engineering rules, documentation, runtime conventions, and Git. Verify lint, strict type checking, production build, development startup, and secret exclusions. Stop for review. Do not build the dashboard, database, authentication, AI integrations, jobs, notifications, external services, or deployment.
+## Implemented private content foundation (Task 12)
+
+The Content Ideas and Content Studio workspaces now use managed Neon Auth, exact owner allowlisting, PostgreSQL persistence, revision history, optimistic concurrency, persistent visual specifications, and an explicit browser-data import. Public information routes remain available. The 20 educational formats and the independent first-principles and real-world-analogy teaching styles remain unchanged. Owner enrollment is a one-time operational step and does not grant access to arbitrary registered users.

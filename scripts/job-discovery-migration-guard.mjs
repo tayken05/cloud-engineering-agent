@@ -19,9 +19,12 @@ export function validateJobDiscoveryMigration(sql, journal) {
     [2, jobsMigrationConfig.migrationTag, jobsMigrationConfig.migrationTimestamp],
     [3, jobDiscoveryMigrationConfig.migrationTag, jobDiscoveryMigrationConfig.migrationTimestamp],
   ];
-  if (journal?.dialect !== "postgresql" || journal.entries?.length !== expected.length ||
-    !journal.entries.every((entry, index) => entry.idx === expected[index][0] && entry.tag === expected[index][1] && entry.when === expected[index][2])) {
-    stop("The Drizzle journal differs from the four reviewed migrations.");
+  if (journal?.dialect !== "postgresql" || journal.entries?.length < expected.length ||
+    !expected.every((expectedEntry, index) => {
+      const entry = journal.entries[index];
+      return entry?.idx === expectedEntry[0] && entry.tag === expectedEntry[1] && entry.when === expectedEntry[2];
+    })) {
+    stop("The Drizzle journal does not preserve the four reviewed migration entries.");
   }
   if (/neon_auth/i.test(sql)) stop("The migration must not reference managed authentication.");
   const statements = sql.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean);
