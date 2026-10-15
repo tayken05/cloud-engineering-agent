@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, ilike, isNotNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, ilike, isNotNull, or, sql, type SQL } from "drizzle-orm";
 
 import type { JobFilters } from "@/features/jobs/job-filters";
 import { createDatabase } from "@/server/db/client";
@@ -18,6 +18,9 @@ export type JobListRecord = Readonly<{
   employmentType: (typeof jobs.employmentType.enumValues)[number] | null;
   experienceLevel: (typeof jobs.experienceLevel.enumValues)[number] | null;
   id: string;
+  collectedAt: Date;
+  lastCheckedAt: Date;
+  lastSeenAt: Date;
   lastVerifiedAt: Date;
   locationText: string;
   overview: string;
@@ -78,6 +81,9 @@ const listSelection = {
   employmentType: jobs.employmentType,
   experienceLevel: jobs.experienceLevel,
   id: jobs.id,
+  collectedAt: jobs.collectedAt,
+  lastCheckedAt: jobs.lastCheckedAt,
+  lastSeenAt: jobs.lastSeenAt,
   lastVerifiedAt: jobs.lastVerifiedAt,
   locationText: jobs.locationText,
   overview: jobs.overview,
@@ -94,7 +100,7 @@ const listSelection = {
 
 function publicStatusCondition(filters: JobFilters): SQL {
   return filters.status === "all"
-    ? ne(jobs.status, "unverified")
+    ? sql`true`
     : eq(jobs.status, filters.status);
 }
 
@@ -152,19 +158,18 @@ export async function listJobs(
       database
         .selectDistinct({ code: jobs.countryCode, name: jobs.countryName })
         .from(jobs)
-        .where(and(ne(jobs.status, "unverified"), isNotNull(jobs.countryCode), isNotNull(jobs.countryName)))
+        .where(and(isNotNull(jobs.countryCode), isNotNull(jobs.countryName)))
         .orderBy(jobs.countryName),
       database
         .selectDistinct({ name: jobEmployers.name, slug: jobEmployers.slug })
         .from(jobs)
         .innerJoin(jobSources, eq(jobs.sourceId, jobSources.id))
         .innerJoin(jobEmployers, eq(jobSources.employerId, jobEmployers.id))
-        .where(ne(jobs.status, "unverified"))
         .orderBy(jobEmployers.name),
       database
         .selectDistinct({ specialization: jobs.specialization })
         .from(jobs)
-        .where(and(ne(jobs.status, "unverified"), isNotNull(jobs.specialization)))
+        .where(isNotNull(jobs.specialization))
         .orderBy(jobs.specialization),
     ]);
     const total = countRows[0]?.count ?? 0;
@@ -215,7 +220,7 @@ export async function getJobBySlug(
       .from(jobs)
       .innerJoin(jobSources, eq(jobs.sourceId, jobSources.id))
       .innerJoin(jobEmployers, eq(jobSources.employerId, jobEmployers.id))
-      .where(and(eq(jobs.slug, slug), ne(jobs.status, "unverified")))
+      .where(eq(jobs.slug, slug))
       .limit(1);
     return rows[0] ?? null;
   } catch {

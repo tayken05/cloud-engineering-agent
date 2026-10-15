@@ -22,6 +22,13 @@
       "when": 1792001573814,
       "tag": "0002_jobs_opportunities",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792018322232,
+      "tag": "0003_job_discovery",
+      "breakpoints": true
     }
   ]
 }

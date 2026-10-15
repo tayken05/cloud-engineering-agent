@@ -187,11 +187,14 @@ h3 { font-size: 16px; font-weight: 700; line-height: 1.5; letter-spacing: -.02em
 .job-status { display: inline-flex; align-items: center; width: fit-content; flex-shrink: 0; border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .job-status-open { color: #236b42; background: #edf8f1; border-color: #c9e8d5; }
 .job-status-expired, .job-status-closed { color: #8a4f25; background: #fff4e8; border-color: #ead1b8; }
+.job-status-unverified { color: #6b5b1f; background: #fff9db; border-color: #eadb91; }
 :root[data-theme="dark"] .job-status-open { color: #9ee4bb; background: #173426; border-color: #2c6444; }
 :root[data-theme="dark"] .job-status-expired, :root[data-theme="dark"] .job-status-closed { color: #f4c79c; background: #3b2b1e; border-color: #68482e; }
+:root[data-theme="dark"] .job-status-unverified { color: #f0df8d; background: #37331f; border-color: #645b2e; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) .job-status-open { color: #9ee4bb; background: #173426; border-color: #2c6444; }
   :root:not([data-theme]) .job-status-expired, :root:not([data-theme]) .job-status-closed { color: #f4c79c; background: #3b2b1e; border-color: #68482e; }
+  :root:not([data-theme]) .job-status-unverified { color: #f0df8d; background: #37331f; border-color: #645b2e; }
 }
 .job-card-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; border-top: 1px solid var(--border); margin-top: 15px; padding-top: 12px; color: var(--muted); font-size: 10px; }
 .job-pagination { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 18px; color: var(--muted); font-size: 11px; }

@@ -13,6 +13,7 @@ import { getDatabaseUrl } from "../src/server/db/environment.ts";
 import {
   collectionRuns,
   jobEmployers,
+  jobDiscoveryRuns,
   jobs,
   jobSources,
   sources,
@@ -110,13 +111,14 @@ test("migration history contains only reviewed additive schema entries", async (
     "0000_initial_intelligence",
     "0001_collection_runs",
     "0002_jobs_opportunities",
+    "0003_job_discovery",
   ]);
   for (const entry of journal.entries) {
     const migration = await readFile(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8");
     const statements = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
     assert.ok(statements.length > 0);
     for (const statement of statements) {
-      assert.match(statement, /^(CREATE TYPE|CREATE TABLE|CREATE INDEX|CREATE UNIQUE INDEX|ALTER TABLE .* ADD CONSTRAINT)/);
+      assert.match(statement, /^(CREATE TYPE|CREATE TABLE|CREATE INDEX|CREATE UNIQUE INDEX|ALTER TABLE .* ADD (COLUMN|CONSTRAINT))/);
       assert.doesNotMatch(statement, /^(DROP|TRUNCATE|DELETE|INSERT|UPDATE)\b/);
       assert.doesNotMatch(statement, /neon_auth/i);
     }
@@ -157,10 +159,31 @@ test("the monitoring table snapshot matches the declared schema", async () => {
 
 test("the jobs migration matches fresh offline generation from the monitoring snapshot", async () => {
   const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0001_snapshot.json", import.meta.url), "utf8"));
-  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const jobsSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0002_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, jobsSnapshot);
   const migration = await readFile(new URL("../drizzle/0002_jobs_opportunities.sql", import.meta.url), "utf8");
   const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the job-discovery migration matches fresh offline generation", async () => {
+  const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0002_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const migration = await readFile(new URL("../drizzle/0003_job_discovery.sql", import.meta.url), "utf8");
+  const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
+  assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the discovery snapshot matches lifecycle columns and monitoring table", async () => {
+  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0003_snapshot.json", import.meta.url), "utf8"));
+  for (const table of [jobDiscoveryRuns, jobSources, jobs]) {
+    const declared = getTableConfig(table);
+    const stored = snapshot.tables[`public.${declared.name}`];
+    assert.ok(stored);
+    assert.deepEqual(Object.keys(stored.columns).sort(), declared.columns.map((column) => column.name).sort());
+    assert.deepEqual(Object.keys(stored.indexes).sort(), declared.indexes.map((index) => index.config.name).sort());
+    assert.deepEqual(Object.keys(stored.checkConstraints).sort(), declared.checks.map((check) => check.name).sort());
+  }
 });
 
 test("the jobs snapshot matches all declared tables and restrictive foreign keys", async () => {
@@ -168,11 +191,21 @@ test("the jobs snapshot matches all declared tables and restrictive foreign keys
   for (const table of [jobEmployers, jobSources, jobs]) {
     const declared = getTableConfig(table);
     const stored = snapshot.tables[`public.${declared.name}`];
+    const laterColumns = new Set(declared.name === "job_sources"
+      ? ["last_attempted_sync_at", "last_successful_sync_at", "consecutive_failures"]
+      : declared.name === "jobs"
+        ? ["last_seen_at", "last_checked_at", "missing_observation_count", "missing_since", "closed_at", "closure_reason"]
+        : []);
+    const laterIndexes = new Set(["jobs_status_checked_idx"]);
+    const laterChecks = new Set([
+      "job_sources_failures_nonnegative", "jobs_checked_after_seen", "jobs_missing_state",
+      "jobs_missing_count_nonnegative", "jobs_closure_state",
+    ]);
     assert.ok(stored, `Missing jobs migration table: ${declared.name}`);
-    assert.deepEqual(Object.keys(stored.columns).sort(), declared.columns.map((column) => column.name).sort());
+    assert.deepEqual(Object.keys(stored.columns).sort(), declared.columns.map((column) => column.name).filter((name) => !laterColumns.has(name)).sort());
     assert.deepEqual(Object.keys(stored.uniqueConstraints).sort(), declared.uniqueConstraints.map((constraint) => constraint.getName()).sort());
-    assert.deepEqual(Object.keys(stored.indexes).sort(), declared.indexes.map((index) => index.config.name).sort());
-    assert.deepEqual(Object.keys(stored.checkConstraints).sort(), declared.checks.map((check) => check.name).sort());
+    assert.deepEqual(Object.keys(stored.indexes).sort(), declared.indexes.map((index) => index.config.name).filter((name) => !laterIndexes.has(name)).sort());
+    assert.deepEqual(Object.keys(stored.checkConstraints).sort(), declared.checks.map((check) => check.name).filter((name) => !laterChecks.has(name)).sort());
     for (const foreignKey of declared.foreignKeys) {
       assert.equal(stored.foreignKeys[foreignKey.getName()].onDelete, "restrict");
     }

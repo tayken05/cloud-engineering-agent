@@ -18,7 +18,7 @@ export const JOB_EMPLOYMENT_VALUES = [
   "full_time", "part_time", "contract", "temporary", "internship",
 ] as const;
 export const JOB_WORKPLACE_VALUES = ["remote", "hybrid", "onsite"] as const;
-export const PUBLIC_JOB_STATUS_VALUES = ["open", "expired", "closed", "all"] as const;
+export const PUBLIC_JOB_STATUS_VALUES = ["open", "unverified", "expired", "closed", "all"] as const;
 export const JOB_SALARY_VALUES = ["disclosed"] as const;
 
 export type JobCategory = (typeof JOB_CATEGORY_VALUES)[number];

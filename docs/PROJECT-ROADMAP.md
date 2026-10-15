@@ -113,9 +113,13 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Registered 11 live-verified vacancies from Canonical, Moniepoint, Supabase, and Veeva through guarded, idempotent administrative tooling. Development repeatability inserted zero duplicates; production retained the same reviewed catalog. Existing news data, daily Cron, and all nine Neon Auth tables were preserved.
 - Kept employer/candidate accounts, job submissions, applications, CV collection, messaging, payments, recurring discovery, talent verification, contractor matching, and candidate search outside the public unauthenticated application.
 
-## Task 10: Recurring job discovery — planned
+## Task 10: Recurring job discovery — implemented
 
-Design bounded, source-compliant refresh and closure detection for approved employer boards. Recheck vacancy status and eligibility, record failures and last verification, prevent concurrent duplicate imports, and preserve the existing news Cron without creating an unreviewed public trigger.
+- Added employer-specific Greenhouse, Ashby, and Lever adapters for Canonical, Moniepoint, Supabase, Veeva Systems, GitLab, Grafana Labs, and Tailscale. The deterministic matcher currently maintains 483 relevant public vacancies.
+- Added `job_discovery_runs`, source health, vacancy last-seen/last-checked state, recoverable PostgreSQL leases, isolated retries, idempotent synchronization, and two-successful-absence closure confirmation through forward migration `0003_job_discovery.sql`.
+- Added a protected production-only `/api/cron/jobs` route at `0 8 * * *` UTC using the existing `CRON_SECRET`; the news Cron remains unchanged at 06:00 UTC. Hobby scheduling may occur anywhere in the configured hour.
+- Development verified malformed/failing providers, retry isolation, concurrent skip, expired-lease recovery, stable identities, and a repeat run with 0 inserts, 0 updates, and 483 unchanged records. Production inserted 472 new records, updated the 11 existing records, preserved news and nine Neon Auth tables, and recorded one successful manual run.
+- The first actual platform-scheduled job run remains pending until Vercel invokes the next 08:00–08:59 UTC window. Employer/candidate accounts and marketplace workflows remain Task 11.
 
 ## Task 11: Verified talent marketplace — planned
 

@@ -4,7 +4,7 @@ import test from "node:test";
 const baseUrl = process.env.JOBS_TEST_URL ?? "http://127.0.0.1:3100";
 
 test("the Jobs Explorer serves genuine records and shareable filters", async () => {
-  const response = await fetch(new URL("/jobs?employer=canonical&category=linux", baseUrl), { signal: AbortSignal.timeout(30_000) });
+  const response = await fetch(new URL("/jobs?employer=canonical&category=linux&q=Junior%20Linux%20Kernel", baseUrl), { signal: AbortSignal.timeout(30_000) });
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Jobs &amp; Opportunities/);

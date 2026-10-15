@@ -1,6 +1,6 @@
 # Cloud Engineering Agent
 
-Cloud Engineering Intelligence and X Content Platform. The deployed application includes a responsive workspace, a 12-feed scheduled technology-news collector, a trusted Sources catalog, and a public Jobs & Opportunities Hub backed by Neon PostgreSQL. The jobs hub presents verified official listings and always sends applications to the employer or authorized recruiting platform.
+Cloud Engineering Intelligence and X Content Platform. The deployed application includes a responsive workspace, a 12-feed scheduled technology-news collector, a trusted Sources catalog, and a public Jobs & Opportunities Hub backed by Neon PostgreSQL. The jobs hub discovers and verifies relevant vacancies daily across seven official employer boards and always sends applications to the employer or authorized recruiting platform.
 
 ## Local development
 

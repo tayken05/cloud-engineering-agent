@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the deployed application includes the responsive shell, 12-source daily news collector, and a public Jobs & Opportunities Hub backed by Neon development and production. Story grouping, recurring job discovery, accounts, applications, and the remaining product workflows remain planned.
+Status: the deployed application includes the responsive shell, 12-source daily news collector, and a public Jobs & Opportunities Hub with daily employer-board discovery backed by Neon development and production. Story grouping, accounts, applications, and the remaining product workflows remain planned.
 
 ## Current application
 
@@ -53,14 +53,18 @@ Task 4B.10 executed the initial production migration through this boundary, and 
 
 Task 9 adds forward migration `0002_jobs_opportunities.sql`: `job_employers`, `job_sources`, and `jobs`, plus seven focused enums. Employers own recruiting sources; sources own vacancies. Provider/external identifiers, slugs, and listing URLs enforce repeatable identity. Nullable location, salary, date, and qualification fields preserve absence rather than inventing facts. Exact-endpoint runners apply the migration and idempotent initial catalog separately; production requires interactive confirmations and before/after Neon Auth fingerprints.
 
+Task 10 adds `0003_job_discovery.sql`, the separate `job_discovery_runs` lease/monitoring table, source-sync health columns, and vacancy last-seen/last-checked/missing/closure evidence. A partial unique index permits one active discovery run. A 240-second lease supports crash recovery. Closure requires either a disclosed expired deadline or two consecutive absences from successfully retrieved complete approved board scopes; failed, rate-limited, malformed, and partial source responses cannot close vacancies.
+
 ## Jobs & Opportunities Hub — Task 9
 
 - `/jobs` is a request-rendered Server Component with bounded 12-record pages, validated shareable filters, newest-first ordering, and a fixed safe database error state. It filters by search text, category, employer, specialization, country, workplace, experience, employment, status, and disclosed salary.
 - `/jobs/[slug]` exposes a stable canonical detail page, verified employer/source evidence, accurate nullable facts, and an external **Apply on Employer Website** link. Closed and expired records are labelled, hidden from application calls to action, and marked `noindex`.
 - `src/server/jobs/list-jobs.ts` is the server-only read boundary. It uses the existing lazy pooled Neon client and fixed query limits. Browser code receives no credentials and no administrative mutation surface exists.
 - `sitemap.xml` contains the Jobs index and current open detail pages. JobPosting JSON-LD is fail-closed: it requires an open listing, a genuine publication time, adequate responsibilities and requirements, valid location eligibility, and an explicitly reviewed eligibility flag. The initial summarized catalog deliberately emits no JobPosting markup.
-- Operator tooling verifies current records against the public Greenhouse, Ashby, and Lever APIs before insertion. It accepts only exact direct development/production endpoints, reviewed migration history, official provider hosts, and an idempotent conflict-free plan. Production also requires an interactive phrase. No build, page request, Cron run, or deployment can invoke it.
-- Recurring discovery, job expiry automation, employer/candidate accounts, applications, CV collection, talent verification, messaging, payments, and marketplace workflows are outside Task 9.
+- Reusable Greenhouse, Ashby, and Lever adapters fetch only a curated seven-board registry with HTTPS host allowlists, redirects disabled, 30-second request deadlines, a 6 MiB response ceiling, 600-record board ceiling, concurrency three, and one bounded retry. Veeva uses Lever's documented Engineering department filter plus exact verification of the previously tracked public posting, avoiding its 13 MiB all-department response.
+- `GET /api/cron/jobs` runs only on Vercel production with the existing `CRON_SECRET`, a 225-second internal budget, and daily `0 8 * * *` UTC schedule. The existing news route and `0 6 * * *` schedule are unchanged. No caller can select employers or supply provider URLs.
+- Matching is deterministic: titles must describe a technical role and listing text must contain an approved engineering domain. The normalizer preserves explicit geography, does not infer worldwide eligibility from “remote,” and never fabricates salary, dates, deadlines, or experience.
+- The public explorer defaults to open records, exposes verification-pending as a factual status, and shows actual last-checked/last-seen timestamps. Closed and expired pages remain available without an apply action. Employer/candidate accounts, applications, CV collection, talent verification, messaging, payments, and marketplace workflows remain future work.
 
 ## Technology Sources Catalog — Task 5
 

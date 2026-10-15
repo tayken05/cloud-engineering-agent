@@ -65,6 +65,9 @@ export const jobStatus = pgEnum("job_status", [
 export const salaryPayPeriod = pgEnum("salary_pay_period", [
   "hour", "day", "week", "month", "year",
 ]);
+export const jobClosureReason = pgEnum("job_closure_reason", [
+  "repeated_absence", "application_deadline", "explicit_provider_closure",
+]);
 
 const auditColumns = () => ({
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -245,6 +248,9 @@ export const jobSources = pgTable("job_sources", {
   verificationUrl: varchar("verification_url", { length: 2048 }).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull(),
+  lastAttemptedSyncAt: timestamp("last_attempted_sync_at", { withTimezone: true }),
+  lastSuccessfulSyncAt: timestamp("last_successful_sync_at", { withTimezone: true }),
+  consecutiveFailures: integer("consecutive_failures").default(0).notNull(),
   ...auditColumns(),
 }, (table) => [
   unique("job_sources_provider_external_id_unique").on(table.provider, table.externalSourceId),
@@ -253,6 +259,7 @@ export const jobSources = pgTable("job_sources", {
   check("job_sources_external_id_not_blank", sql`length(btrim(${table.externalSourceId})) > 0`),
   check("job_sources_canonical_url_format", sql`${table.canonicalUrl} ~ '^https://'`),
   check("job_sources_verification_url_format", sql`${table.verificationUrl} ~ '^https://'`),
+  check("job_sources_failures_nonnegative", sql`${table.consecutiveFailures} >= 0`),
 ]);
 
 export const jobs = pgTable("jobs", {
@@ -287,6 +294,12 @@ export const jobs = pgTable("jobs", {
   publishedAt: timestamp("published_at", { withTimezone: true }),
   collectedAt: timestamp("collected_at", { withTimezone: true }).defaultNow().notNull(),
   lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }).defaultNow().notNull(),
+  missingObservationCount: integer("missing_observation_count").default(0).notNull(),
+  missingSince: timestamp("missing_since", { withTimezone: true }),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  closureReason: jobClosureReason("closure_reason"),
   applicationDeadline: timestamp("application_deadline", { withTimezone: true }),
   status: jobStatus("status").default("unverified").notNull(),
   providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
@@ -306,6 +319,7 @@ export const jobs = pgTable("jobs", {
   index("jobs_experience_status_idx").on(table.experienceLevel, table.status),
   index("jobs_employment_status_idx").on(table.employmentType, table.status),
   index("jobs_source_verified_idx").on(table.sourceId, table.lastVerifiedAt),
+  index("jobs_status_checked_idx").on(table.status, table.lastCheckedAt),
   check("jobs_external_id_not_blank", sql`length(btrim(${table.externalId})) > 0`),
   check("jobs_slug_format", sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
   check("jobs_title_not_blank", sql`length(btrim(${table.title})) > 0`),
@@ -326,8 +340,64 @@ export const jobs = pgTable("jobs", {
   `),
   check("jobs_deadline_after_publication", sql`${table.publishedAt} IS NULL OR ${table.applicationDeadline} IS NULL OR ${table.applicationDeadline} >= ${table.publishedAt}`),
   check("jobs_verified_after_collection", sql`${table.lastVerifiedAt} >= ${table.collectedAt}`),
+  check("jobs_checked_after_seen", sql`${table.lastCheckedAt} >= ${table.lastSeenAt}`),
+  check("jobs_missing_state", sql`
+    (${table.missingObservationCount} = 0 AND ${table.missingSince} IS NULL) OR
+    (${table.missingObservationCount} > 0 AND ${table.missingSince} IS NOT NULL)
+  `),
+  check("jobs_missing_count_nonnegative", sql`${table.missingObservationCount} >= 0`),
+  check("jobs_closure_state", sql`
+    (${table.closedAt} IS NULL AND ${table.closureReason} IS NULL) OR
+    (${table.closedAt} IS NOT NULL AND ${table.closureReason} IS NOT NULL AND ${table.status} IN ('closed', 'expired'))
+  `),
   check("jobs_verification_evidence_not_blank", sql`length(btrim(${table.verificationEvidence})) > 0`),
   check("jobs_content_hash_format", sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`),
+]);
+
+export const jobDiscoveryRuns = pgTable("job_discovery_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  trigger: collectionRunTrigger("trigger").notNull(),
+  status: collectionRunStatus("status").default("running").notNull(),
+  leaseToken: uuid("lease_token"),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  processedSourceKeys: text("processed_source_keys").array().default(sql`'{}'::text[]`).notNull(),
+  failedSourceKeys: text("failed_source_keys").array().default(sql`'{}'::text[]`).notNull(),
+  sourcesAttempted: integer("sources_attempted").default(0).notNull(),
+  sourcesSucceeded: integer("sources_succeeded").default(0).notNull(),
+  sourcesFailed: integer("sources_failed").default(0).notNull(),
+  jobsDiscovered: integer("jobs_discovered").default(0).notNull(),
+  jobsInserted: integer("jobs_inserted").default(0).notNull(),
+  jobsUpdated: integer("jobs_updated").default(0).notNull(),
+  jobsVerified: integer("jobs_verified").default(0).notNull(),
+  jobsMarkedClosed: integer("jobs_marked_closed").default(0).notNull(),
+  jobsPendingVerification: integer("jobs_pending_verification").default(0).notNull(),
+  jobsUnchanged: integer("jobs_unchanged").default(0).notNull(),
+  failureCode: varchar("failure_code", { length: 128 }),
+  ...auditColumns(),
+}, (table) => [
+  uniqueIndex("job_discovery_runs_single_running_idx")
+    .on(sql`(true)`)
+    .where(sql`${table.status} = 'running'`),
+  index("job_discovery_runs_status_finished_idx").on(table.status, table.finishedAt),
+  index("job_discovery_runs_started_idx").on(table.startedAt),
+  check("job_discovery_runs_counts_nonnegative", sql`
+    ${table.sourcesAttempted} >= 0 AND ${table.sourcesSucceeded} >= 0 AND ${table.sourcesFailed} >= 0 AND
+    ${table.jobsDiscovered} >= 0 AND ${table.jobsInserted} >= 0 AND ${table.jobsUpdated} >= 0 AND
+    ${table.jobsVerified} >= 0 AND ${table.jobsMarkedClosed} >= 0 AND
+    ${table.jobsPendingVerification} >= 0 AND ${table.jobsUnchanged} >= 0
+  `),
+  check("job_discovery_runs_source_counts_consistent", sql`
+    ${table.sourcesSucceeded} + ${table.sourcesFailed} = ${table.sourcesAttempted} AND
+    cardinality(${table.processedSourceKeys}) = ${table.sourcesAttempted} AND
+    cardinality(${table.failedSourceKeys}) = ${table.sourcesFailed}
+  `),
+  check("job_discovery_runs_lease_state", sql`
+    (${table.status} = 'running' AND ${table.leaseToken} IS NOT NULL AND ${table.leaseExpiresAt} IS NOT NULL AND ${table.finishedAt} IS NULL) OR
+    (${table.status} <> 'running' AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL AND ${table.finishedAt} IS NOT NULL)
+  `),
+  check("job_discovery_runs_finished_after_start", sql`${table.finishedAt} IS NULL OR ${table.finishedAt} >= ${table.startedAt}`),
 ]);
 
 export const sourcesRelations = relations(sources, ({ many }) => ({ items: many(sourceItems) }));
@@ -365,3 +435,5 @@ export type JobSource = typeof jobSources.$inferSelect;
 export type NewJobSource = typeof jobSources.$inferInsert;
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
+export type JobDiscoveryRun = typeof jobDiscoveryRuns.$inferSelect;
+export type NewJobDiscoveryRun = typeof jobDiscoveryRuns.$inferInsert;

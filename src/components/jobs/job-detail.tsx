@@ -45,6 +45,8 @@ export function JobDetail({ job }: { job: JobDetailRecord }) {
         <Fact label="Published" value={job.publishedAt ? dateFormatter.format(job.publishedAt) : "Not provided by source"} />
         <Fact label="Application deadline" value={job.applicationDeadline ? dateFormatter.format(job.applicationDeadline) : "Not provided by source"} />
         <Fact label="Last verified" value={dateFormatter.format(job.lastVerifiedAt)} />
+        <Fact label="Last checked" value={dateFormatter.format(job.lastCheckedAt)} />
+        <Fact label="Last seen open" value={dateFormatter.format(job.lastSeenAt)} />
       </dl>
 
       {job.remoteRestriction ? (

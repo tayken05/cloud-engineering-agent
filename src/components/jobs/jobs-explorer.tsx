@@ -80,6 +80,7 @@ export function JobFilters({ catalog, filters }: { catalog?: JobCatalog; filters
         <span>Vacancy status</span>
         <select name="status" defaultValue={filters.status}>
           <option value="open">Open</option>
+          <option value="unverified">Verification pending</option>
           <option value="expired">Expired</option>
           <option value="closed">Closed</option>
           <option value="all">All public statuses</option>
@@ -139,7 +140,8 @@ export function JobsExplorer({ catalog, filters }: { catalog: JobCatalog; filter
             </div>
             <div className="job-card-footer">
               <span>
-                Verified <time dateTime={job.lastVerifiedAt.toISOString()}>{dateFormatter.format(job.lastVerifiedAt)}</time>
+                Last checked <time dateTime={job.lastCheckedAt.toISOString()}>{dateFormatter.format(job.lastCheckedAt)}</time>
+                {job.lastCheckedAt.getTime() - job.collectedAt.getTime() <= 7 * 24 * 60 * 60 * 1_000 ? " · Newly discovered" : ""}
               </span>
               <Link className="text-link" href={`/jobs/${job.slug}`}>View vacancy</Link>
             </div>

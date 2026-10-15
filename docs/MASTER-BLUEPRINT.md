@@ -1,7 +1,7 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: the deployed platform includes the intelligence schema, 12-source daily news collector, and a public database-backed Jobs & Opportunities Hub. Task 9 adds 11 live-verified vacancies from four official employer boards, bounded discovery and detail pages, and guarded operator-only import tooling. Automated job discovery, applications, accounts, verified-talent workflows, AI, and X capabilities remain planned.
-Recorded: 2026-10-14.
+Status: the deployed platform includes the intelligence schema, 12-source daily news collector, and a public database-backed Jobs & Opportunities Hub. Task 10 continuously verifies 483 relevant vacancies across seven official employer boards, records discovery health, and schedules protected daily refreshes. Applications, accounts, verified-talent workflows, AI, and X capabilities remain planned.
+Recorded: 2026-10-15.
 
 ## Vision and boundaries
 

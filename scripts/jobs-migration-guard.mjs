@@ -20,15 +20,15 @@ export function validateJobsMigration(sql, journal) {
   if (checksum !== jobsMigrationConfig.migrationSha256) {
     stop("The jobs migration checksum differs from the reviewed artifact.");
   }
-  if (journal?.dialect !== "postgresql" || journal.entries?.length !== 3) {
-    stop("The Drizzle journal must contain exactly the three reviewed migrations.");
+  if (journal?.dialect !== "postgresql" || journal.entries?.length < 3) {
+    stop("The Drizzle journal must retain the three reviewed jobs-baseline migrations.");
   }
   const expected = [
     [0, productionMigrationConfig.migrationTag, productionMigrationConfig.migrationTimestamp],
     [1, collectionRunsMigrationConfig.migrationTag, collectionRunsMigrationConfig.migrationTimestamp],
     [2, jobsMigrationConfig.migrationTag, jobsMigrationConfig.migrationTimestamp],
   ];
-  if (!journal.entries.every((entry, index) => (
+  if (!journal.entries.slice(0, 3).every((entry, index) => (
     entry.idx === expected[index][0] &&
     entry.tag === expected[index][1] &&
     entry.when === expected[index][2]
