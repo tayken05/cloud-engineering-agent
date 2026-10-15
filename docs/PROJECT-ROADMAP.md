@@ -119,9 +119,19 @@ Specify access control and privacy boundaries for the Personal Tech Intelligence
 - Added `job_discovery_runs`, source health, vacancy last-seen/last-checked state, recoverable PostgreSQL leases, isolated retries, idempotent synchronization, and two-successful-absence closure confirmation through forward migration `0003_job_discovery.sql`.
 - Added a protected production-only `/api/cron/jobs` route at `0 8 * * *` UTC using the existing `CRON_SECRET`; the news Cron remains unchanged at 06:00 UTC. Hobby scheduling may occur anywhere in the configured hour.
 - Development verified malformed/failing providers, retry isolation, concurrent skip, expired-lease recovery, stable identities, and a repeat run with 0 inserts, 0 updates, and 483 unchanged records. Production inserted 472 new records, updated the 11 existing records, preserved news and nine Neon Auth tables, and recorded one successful manual run.
-- The first actual platform-scheduled job run remains pending until Vercel invokes the next 08:00–08:59 UTC window. Employer/candidate accounts and marketplace workflows remain Task 11.
+- The first actual platform-scheduled job run remains pending until Vercel invokes the next 08:00–08:59 UTC window. Employer/candidate accounts and marketplace workflows remain a later authenticated phase.
 
-## Task 11: Verified talent marketplace — planned
+## Task 11: Educational Content Studio — implemented
+
+- Added device-local Content Ideas and Content Studio workspaces with bounded validation, idea approval, draft creation, revision checkpoints, evidence references, review status, X previews, and clipboard export.
+- Preserved all 20 original formats as selectable guides, including independent Historical Evolution & First Principles and Real-World Analogies categories.
+- Added six deterministic SVG/Canvas visual templates with square and landscape PNG download. No image bytes are stored in PostgreSQL or Vercel's temporary filesystem.
+- Added an Ask Grok visual-conversation format with editable `@grok` caption and private correct-answer notes. No Grok or X request is made.
+- Added disabled provider-neutral plans for OpenAI Images and xAI Grok Imagine, with official capability, pricing, credential, approval, and durable-storage considerations documented. No paid call or API key is required.
+- Kept private content out of PostgreSQL because application authentication and owner authorization are not implemented. Optional collected-news evidence remains a bounded read-only query.
+- No migration, Cron change, news/job mutation, managed Neon Auth change, publishing, or external AI integration was required.
+
+## Planned phase: Verified talent marketplace
 
 Design authentication and authorization before storing private profiles. Future scope may include employer and candidate registration, human-reviewed identity and professional verification, GitHub and project-portfolio evidence, employer verification, contractor/freelance matching, applications, and candidate discovery. Privacy, consent, retention, moderation, and abuse controls must precede implementation.
 
@@ -133,9 +143,9 @@ When separately authorized, design deterministic story grouping and evidence rev
 
 Develop the private hub across all ten subject areas defined in `MASTER-BLUEPRINT.md`. Plan personalized feeds, bookmarks, configurable digests, source freshness, and continuously updated ingestion. Keep private information separate from the public content workflow.
 
-## Planned phase: Research, content, and memory
+## Planned phase: AI-assisted content and durable memory
 
-Build content research and opportunities, then evaluate OpenAI-assisted drafts. Preserve Style A (Historical-Evolutionary and First-Principles Teaching) and Style B (Real-World Analogy Explainers) as independent categories. Support all other defined content types, including Grok interactions. Plan evidence-backed content memory, review, and correction workflows.
+Add authenticated ownership and durable content persistence before server-side drafts or image requests. Then evaluate OpenAI-assisted research/drafts and provider-backed image generation with budget controls, human approval, durable asset storage, evidence-backed content memory, review, and correction workflows. Preserve the Task 11 format catalog and independent teaching styles.
 
 ## Planned phase: Human-reviewed X workflow
 

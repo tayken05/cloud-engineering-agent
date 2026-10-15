@@ -246,3 +246,11 @@ Read-only catalog comparison against `drizzle/meta/0000_snapshot.json` verified 
 Thirteen controlled integration scenarios passed inside an outer transaction: valid/defaulted source and item records; source-key uniqueness; reliability bounds; source-item external-ID and canonical-URL deduplication; foreign-key rejection; required details for verified stories; a valid verified story; one story linked to evidence from two different sources; duplicate evidence-link rejection; and restrictive deletion. The transaction was rolled back, and a separate read-only residue check found zero test records in all four tables.
 
 A second invocation of the same Drizzle migrator completed without adding a history row or changing the catalog. The full catalog fingerprint remained `51e385431339b45e706ade37fd9382ffff945435a455345e6d78b70f848b57e7`, the migration-history row count remained one, and every application table remained empty. Production `main`, Vercel environment variables, authentication objects, application source, and deployment state were not accessed or modified.
+
+## Task 11 content workspace database decision
+
+Task 11 adds no PostgreSQL objects and no migration. The existing managed `neon_auth` schema does not by itself provide an implemented application session, owner identity, or authorization policy. Persisting unpublished ideas, drafts, moderator answers, or image requests through a public route before that boundary exists would expose private administrative data.
+
+The first Content Studio release therefore keeps a validated, bounded document in browser-local storage and performs only a read-only query for optional `source_items` evidence. No content row, visual binary, base64 payload, or provider credential is written to Neon. Development and production migration history remains exactly `0000` through `0003`.
+
+A later authenticated migration should introduce durable content tables only after ownership, authorization, retention, revision, and asset-storage requirements are approved. That migration can model ideas, drafts, revisions, evidence links, media metadata, approval and publication attempts, and X identifiers. It must remain forward-only and keep actual image bytes in durable object storage rather than PostgreSQL.

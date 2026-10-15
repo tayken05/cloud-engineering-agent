@@ -21,6 +21,8 @@
     "test:jobs": "node --conditions=react-server --test tests/jobs.test.mjs tests/jobs-import-guard.test.mjs tests/jobs-migration-guard.test.mjs tests/job-discovery.test.mjs tests/job-discovery-migration-guard.test.mjs",
     "test:jobs:development": "node --conditions=react-server scripts/jobs-development-verification.mjs",
     "test:jobs:http": "node --test tests/jobs-http.test.mjs",
+    "test:content": "node --test tests/content-studio.test.mjs",
+    "test:content:http": "node --test tests/content-http.test.mjs",
     "test:scheduler:development": "node --conditions=react-server scripts/scheduler-development-verification.mjs",
     "test:news:http": "node --test tests/news-http.test.mjs",
     "db:generate": "drizzle-kit generate",

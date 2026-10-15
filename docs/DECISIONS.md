@@ -213,3 +213,15 @@ Use a separate `job_discovery_runs` table with the news collector's proven datab
 Schedule one additional Hobby-compatible daily Cron at `0 8 * * *` UTC, separated from news collection at `0 6 * * *`. Vercel Hobby can invoke it anywhere within the configured hour. Reuse the existing production `CRON_SECRET` and the shared fail-closed authorization boundary; no new secret or public administrative surface is needed. The first manual production run is deployment verification, not evidence that the first scheduled invocation occurred.
 
 Production rollout completed through exact-endpoint migration and discovery guards. It created the fourth history record, inserted 472 new relevant jobs, refreshed 11 existing jobs, and retained zero duplicate identities. News data and all nine managed Auth tables were unchanged. The first Vercel-scheduled 08:00 UTC execution remains pending until observed.
+
+## Task 11 device-local Educational Content Studio — 2026-10-15
+
+Keep unpublished content out of server persistence until an application-level owner session and authorization policy exist. Provider-managed Neon Auth tables are not treated as working application authentication. Use a versioned, validated, 1 MB browser-local document for the first release, bounded to 100 ideas, 100 drafts, 12 evidence references per document, and 20 revision checkpoints per draft. The interface must disclose that this is device-specific storage rather than synchronized backup.
+
+Preserve all 20 original formats in one typed catalog. Historical Evolution & First Principles and Real-World Analogies have separate identifiers, guidance, and templates. Permit only a bounded read-only `source_items` query for optional evidence; publisher attribution remains supporting context and is never relabelled as independent verification.
+
+Generate visual previews and PNG downloads deterministically in the browser with SVG and Canvas. Store only the compact specification with the draft. Do not store image base64 in PostgreSQL, use Vercel's temporary filesystem for persistence, or provision asset storage before a durable provider is chosen.
+
+Define a provider-independent future image interface while leaving OpenAI Images and xAI Grok Imagine disabled. No SDK, provider key, storage service, or billable API call is required. Keep X publishing, scheduling, analytics, and Grok calls disconnected. Ready-for-review is a local editorial state, and the 280-character counter is a conservative preflight that a future publisher must revalidate.
+
+No database migration is necessary for this security model. Revisit durable content persistence only after authenticated ownership, authorization, revision retention, and asset-storage requirements are approved.

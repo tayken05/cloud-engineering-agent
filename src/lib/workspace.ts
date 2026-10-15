@@ -43,17 +43,17 @@ export const sections = [
     href: "/ideas",
     title: "Content Ideas",
     group: "Create",
-    description: "Turn verified research into useful teaching opportunities.",
-    empty: "Room for your next idea",
-    detail: "Research-backed ideas and content opportunities are planned. There are no saved ideas or AI suggestions yet."
+    description: "Organize evergreen lessons and publisher-backed opportunities across 20 educational formats.",
+    empty: "Develop your next teaching opportunity",
+    detail: "The device-local Ideas workspace separates publisher evidence, educational objectives, creative explanations, and drafting status without exposing private server writes."
   },
   {
     href: "/studio",
     title: "Content Studio",
     group: "Create",
-    description: "A future home for thoughtful cloud engineering content.",
-    empty: "Your studio is waiting",
-    detail: "Drafts, threads, tutorials, challenges, discussions, memes, and polls are planned. AI drafting is not connected; publishing will require human review and a manual action."
+    description: "Draft, review, preview, and illustrate cloud engineering education before manual publication.",
+    empty: "Write with evidence and technical intent",
+    detail: "The device-local studio supports all 20 formats, revision checkpoints, X previews, and deterministic PNG exports. AI providers and X publishing remain disconnected."
   },
   {
     href: "/learning-series",

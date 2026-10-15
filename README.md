@@ -1,6 +1,6 @@
 # Cloud Engineering Agent
 
-Cloud Engineering Intelligence and X Content Platform. The deployed application includes a responsive workspace, a 12-feed scheduled technology-news collector, a trusted Sources catalog, and a public Jobs & Opportunities Hub backed by Neon PostgreSQL. The jobs hub discovers and verifies relevant vacancies daily across seven official employer boards and always sends applications to the employer or authorized recruiting platform.
+Cloud Engineering Intelligence and X Content Platform. The deployed application includes a responsive workspace, a 12-feed scheduled technology-news collector, a trusted Sources catalog, a public Jobs & Opportunities Hub backed by Neon PostgreSQL, and a device-local Educational Content Studio with deterministic PNG visuals. The jobs hub discovers and verifies relevant vacancies daily across seven official employer boards and always sends applications to the employer or authorized recruiting platform.
 
 ## Local development
 
@@ -23,14 +23,14 @@ npm run typecheck
 npm run build
 ```
 
-`npm run start` serves an existing production build locally; it does not deploy the application. No additional test-framework dependency is installed. Node's built-in test runner covers database migrations, ingestion, scheduling, job validation, and route behavior. With the development server running on port 3100, use `npm run test:shell`, `npm run test:jobs:http`, `npm run test:sources:http`, and `npm run test:news:http` for HTTP regression checks.
+`npm run start` serves an existing production build locally; it does not deploy the application. No additional test-framework dependency is installed. Node's built-in test runner covers database migrations, ingestion, scheduling, job validation, content documents, and route behavior. With the development server running on port 3100, use `npm run test:shell`, `npm run test:jobs:http`, `npm run test:sources:http`, `npm run test:news:http`, and `npm run test:content:http` for HTTP regression checks.
 
 Development and production builds use Next.js's supported Webpack mode with Tailwind's official PostCSS integration. This avoids the Turbopack production CSS worker port-binding failure in this execution environment. See `docs/DECISIONS.md` for the recorded reason and known upstream tooling warnings.
 
 ## Project structure
 
-- `src/app/`: App Router layout, dashboard, news, sources, jobs explorer/detail routes, sitemap, feature placeholders, and Tailwind CSS.
-- `src/components/`: shared shell, navigation, appearance control, jobs, and page presentation components.
+- `src/app/`: App Router layout, dashboard, news, sources, jobs explorer/detail routes, educational-content routes, sitemap, remaining placeholders, and Tailwind CSS.
+- `src/components/`: shared shell, navigation, appearance control, jobs, content workspaces, visual rendering, and page presentation components.
 - `src/lib/workspace.ts`: typed navigation and descriptive page catalog.
 - `docs/MASTER-BLUEPRINT.md`: all product requirements, independent teaching styles, private hub, and future technology direction.
 - `docs/PROJECT-ROADMAP.md`: current foundation scope and planned later work.
@@ -43,7 +43,7 @@ The `@/*` alias maps to `src/*`. The application uses the [official Next.js gene
 
 ## Scope and secrets
 
-Authentication, private accounts, employer/candidate workflows, AI, X API, and notifications remain future work. Local and dedicated production migration credentials are used only by authorized server-side tooling and remain outside source control. Public routes expose no administrative writes. Do not install or configure roadmap items without authorization. Keep this project separate from the Football X Agent.
+Authentication, private accounts, employer/candidate workflows, AI-assisted generation, X API, and notifications remain future work. Unpublished Task 11 content is stored only in the operator's browser because server-side owner authorization does not yet exist; see [docs/CONTENT-STUDIO.md](docs/CONTENT-STUDIO.md). Local and dedicated production migration credentials are used only by authorized server-side tooling and remain outside source control. Public routes expose no administrative writes. Do not install or configure roadmap items without authorization. Keep this project separate from the Football X Agent.
 
 Environment files, private keys, local credentials, build output, and dependencies are excluded from Git. No secrets or environment files are required for Task 1. Keep future secrets server-side and never place them in `NEXT_PUBLIC_*` variables.
 

@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: the deployed platform includes the intelligence schema, 12-source daily news collector, and a public database-backed Jobs & Opportunities Hub. Task 10 continuously verifies 483 relevant vacancies across seven official employer boards, records discovery health, and schedules protected daily refreshes. Applications, accounts, verified-talent workflows, AI, and X capabilities remain planned.
+Status: the deployed platform includes the intelligence schema, 12-source daily news collector, a public database-backed Jobs & Opportunities Hub, and the first device-local Educational Content Studio. Task 10 continuously verifies 483 relevant vacancies across seven official employer boards. Task 11 supports all 20 content formats and deterministic visual creation without AI billing or X publishing. Applications, accounts, verified-talent workflows, AI-assisted generation, and X integrations remain planned.
 Recorded: 2026-10-15.
 
 ## Vision and boundaries
@@ -52,15 +52,32 @@ State where an analogy stops matching the actual mechanism and connect it back t
 
 Style A and Style B must remain independently selectable, identifiable content categories. Neither replaces the other. Any future taxonomy, prompt design, content memory, review workflow, or analytics must preserve both categories.
 
-## Additional content categories
+## Twenty educational and engagement formats
 
-- Breaking updates and verified technical facts.
-- Beginner lessons and advanced explanations.
-- Troubleshooting challenges and practical tutorials.
-- Grok interactions and engineering discussions.
-- Memes, polls, and educational threads.
+The Task 11 studio implements one selectable format catalog rather than separate publishing systems:
 
-Each category should have suitable evidence, review, and format requirements. Grok interactions are a content category; no Grok integration is authorized or implemented in Task 1.
+1. Historical Evolution & First Principles.
+2. Real-World Analogies.
+3. Things You Probably Didn't Know.
+4. Breaking Technology Updates.
+5. Beginner-Friendly Education.
+6. Deep Technical Education.
+7. Practical Tutorials.
+8. Troubleshooting Challenges.
+9. Architecture Discussions.
+10. Ask Grok.
+11. Myths vs Facts.
+12. Tech Humor & Memes.
+13. Polls & Interactive Questions.
+14. Engineering Observations.
+15. Careers & Opportunities.
+16. Projects & Hands-On Challenges.
+17. Technical Comparisons.
+18. Visual Education.
+19. Community Engagement.
+20. Threads & Learning Series.
+
+Each format has its own guidance, outline, evidence expectations, and review needs. The first release prepares Grok interaction drafts but has no Grok integration and never claims a response was received.
 
 ## Personal Tech Intelligence Hub
 
@@ -78,9 +95,8 @@ Planned information requirements:
 
 ## Planned product capabilities
 
-The Jobs & Opportunities Hub now presents verified official listings and directs applicants to employer websites. The following capabilities remain planned:
+The Jobs & Opportunities Hub presents verified official listings and directs applicants to employer websites. The device-local Content Studio now supports ideas, drafts, revisions, X previews, and deterministic PNG visuals. The following capabilities remain planned:
 
-- Content research and opportunities.
 - AI-generated drafts.
 - Human-reviewed manual X publishing.
 - Published post tracking.

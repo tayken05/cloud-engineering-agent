@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the deployed application includes the responsive shell, 12-source daily news collector, and a public Jobs & Opportunities Hub with daily employer-board discovery backed by Neon development and production. Story grouping, accounts, applications, and the remaining product workflows remain planned.
+Status: the deployed application includes the responsive shell, 12-source daily news collector, a public Jobs & Opportunities Hub with daily employer-board discovery, and a device-local Educational Content Studio. Story grouping, authenticated accounts, durable private content, publishing, and engagement workflows remain planned.
 
 ## Current application
 
@@ -11,7 +11,7 @@ Status: the deployed application includes the responsive shell, 12-source daily 
 - `@/*` resolves to `src/*`.
 - Root configuration contains Next.js, TypeScript, and ESLint settings.
 - `docs/` contains product requirements, roadmap, architecture, and decisions. Root `AGENTS.md` governs coding-agent work.
-- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata, `/stories` lists collected publisher updates, and `/jobs` plus `/jobs/[slug]` present verified employer vacancies from PostgreSQL. The remaining feature routes stay descriptive empty states. Verified story creation, content, engagement, private-data workflows, and authentication remain planned.
+- The dashboard is a static introduction to the four pillars. `/sources` lists approved source metadata, `/stories` lists collected publisher updates, and `/jobs` plus `/jobs/[slug]` present verified employer vacancies from PostgreSQL. `/ideas`, `/studio`, and `/learning-series` implement the first educational-content workflow. The remaining feature routes stay descriptive empty states. Verified story creation, engagement, durable private-data workflows, and authentication remain planned.
 
 ## Implemented application shell
 
@@ -65,6 +65,17 @@ Task 10 adds `0003_job_discovery.sql`, the separate `job_discovery_runs` lease/m
 - `GET /api/cron/jobs` runs only on Vercel production with the existing `CRON_SECRET`, a 225-second internal budget, and daily `0 8 * * *` UTC schedule. The existing news route and `0 6 * * *` schedule are unchanged. No caller can select employers or supply provider URLs.
 - Matching is deterministic: titles must describe a technical role and listing text must contain an approved engineering domain. The normalizer preserves explicit geography, does not infer worldwide eligibility from “remote,” and never fabricates salary, dates, deadlines, or experience.
 - The public explorer defaults to open records, exposes verification-pending as a factual status, and shows actual last-checked/last-seen timestamps. Closed and expired pages remain available without an apply action. Employer/candidate accounts, applications, CV collection, talent verification, messaging, payments, and marketplace workflows remain future work.
+
+## Educational Content Studio — Task 11
+
+- `src/features/content-studio/` owns the 20-format catalog, validated local document model, X preflight rules, visual specifications, and disabled provider-neutral AI image contract.
+- `src/components/content/` owns interactive Client Components for ideas, drafts, preview, revisions, clipboard export, and Canvas PNG export. Server Components remain responsible for routes and the bounded evidence query.
+- `src/server/content/list-content-evidence.ts` is a read-only server boundary returning at most 40 recent publisher records. It creates no build-time connection and returns no private or operational fields.
+- Device storage is versioned, validated on read, limited to 100 ideas, 100 drafts, 20 revisions per draft, 12 evidence references per document, and 1 MB serialized data. It is an operator convenience rather than durable storage or cross-device synchronization.
+- Six deterministic SVG/Canvas templates provide square and landscape previews and real PNG downloads without server compute, paid generation, PostgreSQL image bytes, or Vercel filesystem persistence.
+- The OpenAI Images and xAI Grok Imagine adapters are interface plans only. Controls state that providers are disabled. No key, SDK, API request, or billable capability is included.
+- The Ask Grok format stores an editable caption, technical visual, and private moderator answer. It never claims a response was received and does not fabricate conversation screenshots.
+- See `docs/CONTENT-STUDIO.md` for formats, storage boundaries, review checks, visual rendering, and future provider requirements.
 
 ## Technology Sources Catalog — Task 5
 
