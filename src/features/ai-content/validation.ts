@@ -22,6 +22,8 @@ import {
   type AiFactualClaim,
   type AiIdeaRequest,
   type AiIdeaSuggestion,
+  type AiPreparedPostOutput,
+  type AiPreparePostRequest,
 } from "./types.ts";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -88,6 +90,17 @@ export function validateIdeaRequest(value: unknown): AiIdeaRequest {
     throw new AiGenerationError("invalid_request", "Request 3–5 ideas with valid bounded filters.");
   }
   return { audience, batchSize, contentObjective, formatId, idempotencyKey, researchPath, topic };
+}
+
+export function validatePreparePostRequest(value: unknown): AiPreparePostRequest {
+  const item = record(value);
+  if (!item) throw new AiGenerationError("invalid_request", "The Prepare a Post request is invalid.");
+  const direction = boundedText(item.direction, 500, false);
+  const idempotencyKey = boundedText(item.idempotencyKey, 128);
+  if (direction === null || !idempotencyKey || !IDEMPOTENCY_PATTERN.test(idempotencyKey)) {
+    throw new AiGenerationError("invalid_request", "The Prepare a Post request is invalid.");
+  }
+  return { direction, idempotencyKey };
 }
 
 export function validateDraftRequest(value: unknown): AiDraftRequest {
@@ -202,6 +215,18 @@ export function validateDraftOutput(value: unknown, formatId: ContentFormatId, a
   return { caption, evidenceSourceItemIds: ids, explanation, factualClaims: claims, mediaRecommendation: { altText, imagePrompt, path: mediaPath, rationale }, moderatorNotes, pollOptions, reviewFlags: [...new Set(flags)].slice(0, 20), threadPosts, title, verificationStatus: safeStatus, visual: visualSpec };
 }
 
+export function validatePreparedPostOutput(value: unknown, allowedEvidence: ReadonlySet<string>): AiPreparedPostOutput {
+  const item = record(value);
+  const selectionRationale = boundedText(item?.selectionRationale, 1200);
+  if (!item || item.worthPublishing !== true || !selectionRationale) {
+    throw new AiGenerationError("invalid_output", "The provider did not identify a worthwhile publishable premise.");
+  }
+  const idea = validateIdeaSuggestions({ ideas: [item.idea] }, allowedEvidence, 1)[0];
+  if (!idea) throw new AiGenerationError("invalid_output", "The provider did not return a valid selected idea.");
+  const draft = validateDraftOutput(item.draft, idea.formatId, allowedEvidence);
+  return { draft, idea, selectionRationale, worthPublishing: true };
+}
+
 function normalizedWords(value: string): Set<string> {
   return new Set(value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2));
 }
@@ -230,4 +255,19 @@ export function draftOutputSchema() {
   const ideaSchema = ideaOutputSchema();
   const visualSchema = ((ideaSchema.properties.ideas.items.properties.suggestedVisual) as Readonly<Record<string, unknown>>);
   return { type: "object", additionalProperties: false, required: ["title", "caption", "explanation", "moderatorNotes", "threadPosts", "pollOptions", "evidenceSourceItemIds", "verificationStatus", "factualClaims", "reviewFlags", "visual", "mediaRecommendation"], properties: { title: { type: "string" }, caption: { type: "string" }, explanation: { type: "string" }, moderatorNotes: { type: "string" }, threadPosts: { type: "array", items: { type: "string" }, maxItems: 20 }, pollOptions: { type: "array", items: { type: "string" }, maxItems: 4 }, evidenceSourceItemIds: { type: "array", items: { type: "string" }, maxItems: 12 }, verificationStatus: { type: "string", enum: [...AI_VERIFICATION_STATUSES] }, factualClaims: { type: "array", maxItems: 30, items: { type: "object", additionalProperties: false, required: ["text", "kind", "evidenceSourceItemIds", "reviewStatus"], properties: { text: { type: "string" }, kind: { type: "string", enum: ["sourced_fact", "interpretation", "hypothetical_example"] }, evidenceSourceItemIds: { type: "array", items: { type: "string" }, maxItems: 12 }, reviewStatus: { type: "string", enum: ["supported", "needs_review"] } } } }, reviewFlags: { type: "array", items: { type: "string" }, maxItems: 20 }, visual: visualSchema, mediaRecommendation: { type: "object", additionalProperties: false, required: ["path", "rationale", "imagePrompt", "altText"], properties: { path: { type: "string", enum: [...CONTENT_MEDIA_PATHS] }, rationale: { type: "string" }, imagePrompt: { type: "string" }, altText: { type: "string" } } } } } as const;
+}
+
+export function preparedPostOutputSchema() {
+  const ideas = ideaOutputSchema();
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["worthPublishing", "selectionRationale", "idea", "draft"],
+    properties: {
+      worthPublishing: { type: "boolean" },
+      selectionRationale: { type: "string" },
+      idea: ideas.properties.ideas.items,
+      draft: draftOutputSchema(),
+    },
+  } as const;
 }

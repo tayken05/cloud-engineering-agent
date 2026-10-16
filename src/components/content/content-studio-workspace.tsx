@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 
 import type { AiDraftIntent, AiPublicStatus } from "@/features/ai-content/types";
 import { aiStatusLabel, aiStatusMessage } from "@/features/ai-content/status-copy";
@@ -17,9 +17,28 @@ import {
 } from "@/features/content-studio/content-workspace";
 import { useContentWorkspace } from "./content-workspace-store";
 import { VisualCreator } from "./visual-creator";
-import { generateAiDraftAction } from "@/server/ai/actions";
+import { generateAiDraftAction, prepareAiPostAction } from "@/server/ai/actions";
 import { generateAiImageAction } from "@/server/ai/image-actions";
 import type { AiImagePublicStatus } from "@/server/ai/image-config";
+
+const NEWSROOM_IMAGE_APPROVAL_KEY = "cloud-engineering-agent:newsroom-image-approval:v1";
+const NEWSROOM_IMAGE_APPROVAL_EVENT = "cloud-engineering-agent:image-approval-changed";
+
+function subscribeImageApproval(notify: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === NEWSROOM_IMAGE_APPROVAL_KEY) notify();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(NEWSROOM_IMAGE_APPROVAL_EVENT, notify);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(NEWSROOM_IMAGE_APPROVAL_EVENT, notify);
+  };
+}
+
+function readImageApproval() {
+  return window.localStorage.getItem(NEWSROOM_IMAGE_APPROVAL_KEY) === "approved";
+}
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -27,6 +46,12 @@ function formatDate(value: string): string {
 
 function formatName(value: string): string {
   return value.replaceAll("_", " ").replace(/(^|\s)\S/g, (character) => character.toUpperCase());
+}
+
+function editorialStatusClass(status: ContentDraft["status"]): string {
+  if (status === "approved" || status === "ready_for_review") return "status-chip status-safe";
+  if (status === "rejected") return "status-chip status-rejected";
+  return "status-chip";
 }
 
 function Counter({ value, limit = X_POST_CHARACTER_LIMIT }: { value: string; limit?: number }) {
@@ -92,6 +117,11 @@ export function ContentStudioWorkspace({
   const [imageAspect, setImageAspect] = useState<"square" | "landscape">("landscape");
   const [imageBusy, setImageBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [prepareBusy, setPrepareBusy] = useState(false);
+  const [prepareDirection, setPrepareDirection] = useState("");
+  const [prepareProgress, setPrepareProgress] = useState("");
+  const [revisionDirection, setRevisionDirection] = useState("");
+  const allowRecommendedImage = useSyncExternalStore(subscribeImageApproval, readImageApproval, () => false);
 
   const storedDraft = workspace.state?.drafts.find((draft) => draft.id === selectedId)
     ?? workspace.state?.drafts.find((draft) => draft.id === initialDraftId)
@@ -100,10 +130,18 @@ export function ContentStudioWorkspace({
   const editing = storedDraft ? draftEdits[storedDraft.id] ?? storedDraft : null;
 
   const format = editing ? getContentFormat(editing.formatId) : null;
+  const preparedAssets = editing ? mediaAssets.filter((asset) => asset.draftId === editing.id) : [];
+  const hasFinishedCopy = Boolean(editing && (editing.caption.trim() || editing.threadPosts.some((post) => post.trim())));
   const evidencePool = useMemo(() => new Map([
     ...evidenceOptions.map((item) => [item.id, item] as const),
     ...(editing?.evidence ?? []).map((item) => [item.id, item] as const),
   ]), [editing?.evidence, evidenceOptions]);
+
+  function rememberSelectedDraft(id: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("draft", id);
+    window.history.replaceState({}, "", url);
+  }
 
   function selectDraft(id: string) {
     setSelectedId(id);
@@ -113,6 +151,13 @@ export function ContentStudioWorkspace({
     setAiAngle("");
     setFeedback("");
     setReviewProblems([]);
+    rememberSelectedDraft(id);
+  }
+
+  function setImageApproval(approved: boolean) {
+    if (approved) window.localStorage.setItem(NEWSROOM_IMAGE_APPROVAL_KEY, "approved");
+    else window.localStorage.removeItem(NEWSROOM_IMAGE_APPROVAL_KEY);
+    window.dispatchEvent(new Event(NEWSROOM_IMAGE_APPROVAL_EVENT));
   }
 
   function update<K extends keyof ContentDraft>(key: K, value: ContentDraft[K]) {
@@ -139,6 +184,7 @@ export function ContentStudioWorkspace({
     const id = await workspace.createDraft(newDraftFormat);
     if (id) {
       setSelectedId(id); setAiIntent("new_subject"); setAiSubject(""); setAiAngle("");
+      rememberSelectedDraft(id);
       setFeedback(`New ${getContentFormat(newDraftFormat).label} draft saved to the private workspace.`);
     }
   }
@@ -180,13 +226,116 @@ export function ContentStudioWorkspace({
     if (!editing) return;
     const posts = editing.threadPosts.filter((post) => post.trim());
     const text = posts.length > 0
-      ? posts.map((post, index) => `${index + 1}/${posts.length} ${post}`).join("\n\n")
+      ? posts.join("\n\n")
       : editing.caption;
     try {
       await navigator.clipboard.writeText(text);
       setFeedback("Finished text copied to the clipboard.");
     } catch {
       setFeedback("Clipboard access was unavailable. Select the preview text and copy it manually.");
+    }
+  }
+
+  async function prepareOnePost() {
+    if (!aiStatus.available || prepareBusy) return;
+    setPrepareBusy(true);
+    setPrepareProgress("Finding a worthwhile opportunity, checking content history, and developing the strongest approach…");
+    setFeedback("");
+    try {
+      const result = await prepareAiPostAction({
+        direction: prepareDirection.trim(),
+        idempotencyKey: `prepare-post:${crypto.randomUUID()}`,
+      });
+      if (!result.ok || !result.state || !result.draftId) {
+        setPrepareProgress(result.error ?? "The newsroom could not prepare a validated post.");
+        return;
+      }
+      workspace.replaceState(result.state);
+      setSelectedId(result.draftId);
+      setDraftEdits({});
+      setReviewProblems([]);
+      setRevisionDirection("");
+      rememberSelectedDraft(result.draftId);
+      const preparedDraft = result.state.drafts.find((draft) => draft.id === result.draftId);
+      if (!preparedDraft) {
+        setPrepareProgress("The post was saved, but the refreshed workspace did not return it. Reload the page to continue.");
+        return;
+      }
+      if (preparedDraft.mediaPath !== "text_only" && allowRecommendedImage && imageStatus.available) {
+        setPrepareProgress(`The post is saved. Generating and inspecting its recommended image with a maximum $${imageStatus.maxEstimatedCostUsd.toFixed(2)} application reservation…`);
+        const imageResult = await generateAiImageAction({
+          aspect: imageAspect,
+          draftId: preparedDraft.id,
+          expectedVersion: preparedDraft.recordVersion,
+          idempotencyKey: `ai-image:${crypto.randomUUID()}`,
+        });
+        if (imageResult.ok && imageResult.asset) {
+          if (imageResult.state) workspace.replaceState(imageResult.state);
+          setMediaAssets((current) => [imageResult.asset!, ...current.filter((asset) => asset.id !== imageResult.asset!.id)]);
+          setPrepareProgress(imageResult.warning ?? "Complete post package prepared, inspected, saved, and ready for editorial review.");
+        } else {
+          setPrepareProgress(`${imageResult.error ?? "The image request did not complete."} The saved text remains available for review, and no image is shown as generated.`);
+        }
+      } else if (preparedDraft.mediaPath !== "text_only") {
+        const reason = imageStatus.available
+          ? `Image generation was not authorized for this request. Enable the reusable image allowance below or use Generate image after reviewing the brief.`
+          : "AI image generation or private storage is unavailable. The completed text is saved, and the media recommendation remains clearly marked as pending.";
+        setPrepareProgress(`Post prepared and saved. ${reason}`);
+      } else {
+        setPrepareProgress("Complete text-only post prepared, saved, and ready for editorial review.");
+      }
+    } catch {
+      setPrepareProgress("The authenticated newsroom request failed without recording a successful post.");
+    } finally {
+      setPrepareBusy(false);
+    }
+  }
+
+  async function reviewPreparedPost(decision: "approve" | "reject") {
+    if (!editing) return;
+    const note = decision === "reject" ? window.prompt("Optional feedback for this rejected post:", "") ?? "" : "";
+    const result = await workspace.reviewDraft(editing.id, editing.recordVersion, decision, note);
+    if (result.ok) {
+      setDraftEdits({});
+      setFeedback(decision === "approve" ? "Post approved for the future manual publishing workflow. Nothing was published to X." : "Post rejected and retained with its history.");
+    } else setFeedback(result.error ?? "The editorial decision could not be saved.");
+  }
+
+  async function revisePreparedPost() {
+    if (!editing || !aiStatus.available || aiBusy) return;
+    setAiBusy(true);
+    setFeedback("Saving the current version before preparing a revision…");
+    try {
+      const saved = await workspace.saveDraft(editing);
+      if (!saved.ok || !("state" in saved) || !saved.state) {
+        setFeedback(saved.error ?? "The current version could not be saved before revision.");
+        return;
+      }
+      const persisted = saved.state.drafts.find((draft) => draft.id === editing.id);
+      if (!persisted) {
+        setFeedback("The current version could not be found after saving.");
+        return;
+      }
+      const result = await generateAiDraftAction({
+        angle: revisionDirection.trim() || "Develop a meaningfully different treatment of the same worthwhile premise. Vary the hook, structure, and emphasis without changing supported facts.",
+        draftId: persisted.id,
+        expectedVersion: persisted.recordVersion,
+        idempotencyKey: `ai-draft:${crypto.randomUUID()}`,
+        intent: "develop_current",
+        subject: "",
+      });
+      if (!result.ok || !result.state) {
+        setFeedback(result.error ?? "The revision did not complete. The saved version remains unchanged.");
+        return;
+      }
+      workspace.replaceState(result.state);
+      setDraftEdits({});
+      setRevisionDirection("");
+      setFeedback("Revised post saved. The previous copy remains available in revision history.");
+    } catch {
+      setFeedback("The authenticated revision request failed. The saved version remains available.");
+    } finally {
+      setAiBusy(false);
     }
   }
 
@@ -280,6 +429,69 @@ export function ContentStudioWorkspace({
       <aside className="operator-notice"><div><strong>Persistent private drafting</strong><p>Saves complete on the server before confirmation. Version checks prevent a second browser session from silently replacing a newer draft.</p></div><span className="status-chip status-safe">Human review required</span></aside>
       {workspace.storageError ? <p className="studio-alert" role="alert">{workspace.storageError}</p> : null}
 
+      <section className="studio-panel newsroom-command" aria-labelledby="prepare-post-heading">
+        <div className="studio-panel-heading">
+          <div><p className="eyebrow">Intelligent Cloud Newsroom</p><h2 id="prepare-post-heading">Prepare one complete post</h2></div>
+          <span className={aiStatus.available ? "status-chip status-safe" : "status-chip"}>{aiStatusLabel(aiStatus)}</span>
+        </div>
+        <p className="newsroom-lede">The newsroom chooses a worthwhile subject, checks your content history, develops the strongest treatment, verifies what it can, and saves finished X-ready copy. A topic or format is optional.</p>
+        {aiStatus.available ? <>
+          <label className="newsroom-direction">Optional subject or direction
+            <textarea rows={2} maxLength={500} value={prepareDirection} onChange={(event) => setPrepareDirection(event.target.value)} placeholder="Leave blank for autonomous discovery, or add a light direction such as Linux, cloud security, or something playful." />
+          </label>
+          <label className={imageStatus.available ? "newsroom-image-consent" : "newsroom-image-consent is-disabled"}>
+            <input type="checkbox" checked={allowRecommendedImage} disabled={!imageStatus.available} onChange={(event) => setImageApproval(event.target.checked)} />
+            <span><strong>Allow a recommended AI image</strong><small>{imageStatus.available ? `Remember this owner approval on this device. Each prepared post may use at most one image request with up to $${imageStatus.maxEstimatedCostUsd.toFixed(2)} reserved from the shared $2 allowance.` : "Image generation or private media storage is unavailable. Text preparation still works."}</small></span>
+          </label>
+          <div className="newsroom-command-row">
+            <button type="button" className="primary-action newsroom-primary-action" disabled={prepareBusy || workspace.busy || aiBusy || imageBusy} onClick={prepareOnePost}>{prepareBusy ? "Preparing your post…" : "Prepare a Post"}</button>
+            <span className="field-note">One click creates one saved editorial package. It never publishes to X.</span>
+          </div>
+        </> : <div className="studio-state"><strong>AI preparation is unavailable</strong><p>{aiStatusMessage(aiStatus)}</p></div>}
+        {prepareProgress ? <p className="newsroom-progress" role="status" aria-live="polite">{prepareProgress}</p> : null}
+      </section>
+
+      {editing && hasFinishedCopy ? <section className="studio-panel newsroom-result" aria-labelledby="prepared-post-heading">
+        <div className="studio-panel-heading">
+          <div><p className="eyebrow">Selected content package</p><h2 id="prepared-post-heading">{editing.title || "Prepared post"}</h2></div>
+          <span className={editorialStatusClass(editing.status)}>{formatName(editing.status)}</span>
+        </div>
+        <XPreview draft={editing} />
+        {preparedAssets.length > 0 ? <div className="newsroom-media">
+          {preparedAssets.map((asset) => <figure key={asset.id}>
+            <Image unoptimized src={`/api/content/media/${asset.id}`} alt={asset.altText} width={asset.width} height={asset.height} />
+            <figcaption>{asset.origin === "ai_generated" ? "AI-generated and inspected editorial image" : "Owner-provided editorial image"}. {asset.imageDescription}</figcaption>
+          </figure>)}
+        </div> : editing.mediaPath !== "text_only" ? <div className="newsroom-media-pending">
+          <strong>Recommended image has not been generated</strong>
+          <p>The post remains saved. No visual description is being presented as an actual image.</p>
+          <button type="button" className="secondary-action" disabled={!imageStatus.available || imageBusy || workspace.busy || !editing.imagePrompt.trim()} onClick={generateImage}>{imageBusy ? "Generating and inspecting…" : imageStatus.available ? `Generate image, up to $${imageStatus.maxEstimatedCostUsd.toFixed(2)}` : "Image generation unavailable"}</button>
+        </div> : null}
+        <div className="newsroom-review-actions">
+          <button type="button" className="primary-action" disabled={workspace.busy || editing.status === "approved"} onClick={() => reviewPreparedPost("approve")}>{editing.status === "approved" ? "Approved" : "Approve"}</button>
+          <button type="button" className="secondary-action" disabled={aiBusy || workspace.busy || !aiStatus.available} onClick={revisePreparedPost}>{aiBusy ? "Revising…" : "Revise"}</button>
+          <button type="button" className="quiet-action" disabled={workspace.busy || editing.status === "rejected"} onClick={() => reviewPreparedPost("reject")}>{editing.status === "rejected" ? "Rejected" : "Reject"}</button>
+          <button type="button" className="secondary-action" onClick={copyDraft}>Copy</button>
+        </div>
+        <label className="newsroom-revision-direction">Optional revision direction
+          <input maxLength={500} value={revisionDirection} onChange={(event) => setRevisionDirection(event.target.value)} placeholder="Leave blank for a genuinely different treatment, or describe what should change." />
+        </label>
+        <details className="newsroom-review-details">
+          <summary>Evidence and technical review</summary>
+          <div>
+            <h3>Supporting publisher records</h3>
+            {editing.evidence.length ? <ul>{editing.evidence.map((item) => <li key={item.id}><a href={item.url} target="_blank" rel="noreferrer">{item.publisher}: {item.title}</a></li>)}</ul> : <p>No publisher record supports this evergreen package. Factual claims require owner review.</p>}
+            <h3>Technical explanation</h3><p className="preserve-lines">{editing.explanation}</p>
+            <h3>Private review notes</h3><p className="preserve-lines">{editing.moderatorNotes || "No additional review notes."}</p>
+          </div>
+        </details>
+        <p className="field-note" aria-live="polite">{feedback || `Saved version ${editing.recordVersion}. Last updated ${formatDate(editing.updatedAt)}.`}</p>
+      </section> : <div className="studio-state newsroom-empty"><strong>No prepared post selected</strong><p>Use Prepare a Post above. The finished result will appear here without a manual setup form.</p></div>}
+
+      <details className="manual-workspace" open={!hasFinishedCopy}>
+        <summary>Manual drafting and advanced tools</summary>
+        <div className="manual-workspace-body">
+
       <section className="draft-toolbar" aria-label="Draft selection">
         <label>Working draft
           <select value={editing?.id ?? ""} onChange={(event) => selectDraft(event.target.value)}>
@@ -333,7 +545,7 @@ export function ContentStudioWorkspace({
           <form className="studio-panel draft-editor" onSubmit={save}>
             <div className="studio-panel-heading">
               <div><p className="eyebrow">Drafting workflow</p><h2>Write and review</h2></div>
-              <span className={editing.status === "ready_for_review" ? "status-chip status-safe" : "status-chip"}>{formatName(editing.status)}</span>
+              <span className={editorialStatusClass(editing.status)}>{formatName(editing.status)}</span>
             </div>
             <div className="format-guide">
               <strong>{format.label}</strong>
@@ -463,6 +675,8 @@ export function ContentStudioWorkspace({
           </section>
         </>
       ) : <div className="studio-state">Create a draft to begin writing.</div>}
+        </div>
+      </details>
     </div>
   );
 }

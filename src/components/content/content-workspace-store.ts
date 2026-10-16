@@ -7,7 +7,7 @@ import type { ContentDraft, ContentIdea, ContentWorkspaceState, IdeaStatus } fro
 import { CONTENT_WORKSPACE_STORAGE_KEY, parseContentWorkspace, serializeContentWorkspace } from "@/features/content-studio/content-workspace";
 import {
   createDraftAction, createDraftFromIdeaAction, importBrowserWorkspaceAction,
-  restoreDraftRevisionAction, saveDraftAction, saveIdeaAction, updateIdeaStatusAction,
+  restoreDraftRevisionAction, reviewDraftAction, saveDraftAction, saveIdeaAction, updateIdeaStatusAction,
   type WorkspaceActionResult,
 } from "@/server/content/workspace-actions";
 
@@ -47,6 +47,7 @@ export function useContentWorkspace(initialState: ContentWorkspaceState) {
     return "draftId" in result && typeof result.draftId === "string" ? result.draftId : null;
   }, [apply]);
   const saveDraft = useCallback((draft: ContentDraft) => apply(() => saveDraftAction(draft)), [apply]);
+  const reviewDraft = useCallback((draftId: string, version: number, decision: "approve" | "reject", feedback = "") => apply(() => reviewDraftAction(draftId, version, decision, feedback)), [apply]);
   const restoreRevision = useCallback((draftId: string, revisionId: string, version: number) => apply(() => restoreDraftRevisionAction(draftId, revisionId, version)), [apply]);
   const importLegacy = useCallback(async () => {
     if (!legacyState) return null;
@@ -65,5 +66,5 @@ export function useContentWorkspace(initialState: ContentWorkspaceState) {
     setStorageError(null);
   }, []);
 
-  return { busy, createDraft, createDraftFromIdea, exportLegacy, importLegacy, legacyState, replaceState, restoreRevision, saveDraft, saveIdea, state, storageError, updateIdeaStatus } as const;
+  return { busy, createDraft, createDraftFromIdea, exportLegacy, importLegacy, legacyState, replaceState, restoreRevision, reviewDraft, saveDraft, saveIdea, state, storageError, updateIdeaStatus } as const;
 }

@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 
-import { generateDraft, generateIdeaBatch } from "@/features/ai-content/service";
+import { generateDraft, generateIdeaBatch, preparePost } from "@/features/ai-content/service";
 import { prepareDraftGenerationContext } from "@/features/ai-content/draft-context";
 import { AiGenerationError, type AiIdeaRequest, type AiPublicStatus } from "@/features/ai-content/types";
 import { validateDraftRequest, validateIdeaSuggestions } from "@/features/ai-content/validation";
 import type { ContentWorkspaceState, EvidenceReference } from "@/features/content-studio/content-types";
 import { getRequiredOwnerId } from "@/server/auth/owner";
-import { loadContentWorkspace, saveContentDraft, saveContentIdea } from "@/server/content/workspace-repository";
+import { loadContentWorkspace, saveContentDraft, saveContentIdea, savePreparedContentPackage } from "@/server/content/workspace-repository";
 import { readAiRuntimeConfig, readOpenAiApiKey } from "./config";
 import { createOpenAiProvider } from "./openai-provider";
 import {
@@ -31,6 +31,14 @@ export type AiIdeaActionResult = Readonly<{
 
 export type AiDraftActionResult = Readonly<{
   error?: string;
+  ok: boolean;
+  state?: ContentWorkspaceState;
+}>;
+
+export type PreparePostActionResult = Readonly<{
+  draftId?: string;
+  error?: string;
+  mediaPath?: "text_only" | "text_first" | "image_first";
   ok: boolean;
   state?: ContentWorkspaceState;
 }>;
@@ -72,6 +80,80 @@ export async function generateAiIdeasAction(request: AiIdeaRequest): Promise<AiI
     revalidatePath("/ideas");
     return { ok: true, suggestions: await listAiIdeaSuggestions(ownerId) };
   } catch (error) { return { error: safeError(error), ok: false }; }
+}
+
+export async function prepareAiPostAction(value: unknown): Promise<PreparePostActionResult> {
+  const ownerId = await getRequiredOwnerId();
+  try {
+    const { config, provider, store } = runtime();
+    const [evidence, existingContent] = await Promise.all([
+      listAiEvidence({ limit: 20 }),
+      listExistingContentSubjects(ownerId),
+    ]);
+    const generated = await preparePost({ config, evidence, existingContent, ownerId, provider, request: value, store });
+    if (generated.duplicate || !generated.output) {
+      return { error: "This Prepare a Post request was already processed. Reload the workspace to see its result.", ok: false };
+    }
+    const { draft: output, idea, selectionRationale } = generated.output;
+    const now = new Date().toISOString();
+    const ideaId = `idea-${generated.runId}`;
+    const draftId = `draft-${crypto.randomUUID()}`;
+    const ideaEvidence = evidence.filter((item) => idea.evidenceSourceItemIds.includes(item.id)).map(evidenceReference);
+    const draftEvidence = evidence.filter((item) => output.evidenceSourceItemIds.includes(item.id)).map(evidenceReference);
+    const needsReview = output.verificationStatus === "needs_review" || output.reviewFlags.length > 0 || output.mediaRecommendation.path !== "text_only";
+    await savePreparedContentPackage(ownerId, {
+      audience: idea.audience,
+      createdAt: now,
+      educationalObjective: idea.educationalObjective,
+      engagementStyle: idea.engagementStyle,
+      evidence: ideaEvidence,
+      formatId: idea.formatId,
+      id: ideaId,
+      notes: [
+        `Prepared by the newsroom. ${idea.whyUseful}`,
+        `Selected premise: ${selectionRationale}`,
+        `Angle: ${idea.contentAngle}`,
+        `Verification: ${idea.verificationStatus}.`,
+        ...idea.reviewFlags,
+      ].filter(Boolean).join("\n"),
+      recordVersion: 1,
+      status: "drafted",
+      subject: idea.title,
+      technicalCategory: idea.technicalCategory,
+      updatedAt: now,
+    }, {
+      caption: output.caption,
+      createdAt: now,
+      evidence: draftEvidence,
+      explanation: output.explanation,
+      formatId: idea.formatId,
+      id: draftId,
+      ideaId,
+      imageAltText: output.mediaRecommendation.altText,
+      imagePrompt: output.mediaRecommendation.imagePrompt,
+      mediaPath: output.mediaRecommendation.path,
+      moderatorNotes: [
+        output.moderatorNotes,
+        `AI verification: ${output.verificationStatus}.`,
+        `Media decision: ${output.mediaRecommendation.rationale}`,
+        ...output.reviewFlags,
+      ].filter(Boolean).join("\n"),
+      pollOptions: output.pollOptions,
+      recordVersion: 1,
+      revisions: [],
+      status: needsReview ? "needs_review" : "ready_for_review",
+      threadPosts: output.threadPosts,
+      title: output.title,
+      updatedAt: now,
+      visual: output.visual,
+    });
+    const suggestion = await getAiRunSuggestion(ownerId, generated.runId);
+    if (suggestion) await setAiSuggestionDecision({ acceptedDraftId: draftId, ownerId, status: "accepted", suggestionId: suggestion.id });
+    revalidatePath("/ideas"); revalidatePath("/studio");
+    return { draftId, mediaPath: output.mediaRecommendation.path, ok: true, state: await loadContentWorkspace(ownerId) };
+  } catch (error) {
+    return { error: safeError(error), ok: false };
+  }
 }
 
 export async function reviewAiIdeaAction(suggestionId: string, decision: "accept" | "reject", feedback = ""): Promise<AiIdeaActionResult> {
@@ -145,7 +227,7 @@ export async function generateAiDraftAction(value: unknown): Promise<AiDraftActi
       mediaPath: output.mediaRecommendation.path,
       moderatorNotes: [output.moderatorNotes, `AI verification: ${output.verificationStatus}.`, ...output.reviewFlags].filter(Boolean).join("\n"),
       pollOptions: output.pollOptions,
-      status: "draft",
+      status: output.verificationStatus === "needs_review" || output.reviewFlags.length > 0 ? "needs_review" : "ready_for_review",
       threadPosts: output.threadPosts,
       title: output.title,
       updatedAt: new Date().toISOString(),

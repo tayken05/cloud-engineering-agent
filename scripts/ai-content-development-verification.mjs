@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "@neondatabase/serverless";
 
 import { aiContentMigrationConfig as config } from "./ai-content-migration.config.mjs";
-import { aiVisualMigrationConfig } from "./ai-visual-migration.config.mjs";
+import { intelligentNewsroomMigrationConfig } from "./intelligent-newsroom-migration.config.mjs";
 import { loadDevelopmentCredential, sourceCatalogConfig } from "./source-catalog-guard.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,8 +30,8 @@ try {
   const identity = (await client.query("SELECT current_database() database_name,current_schema() current_schema")).rows[0];
   assert.deepEqual(identity, { database_name: "neondb", current_schema: "public" });
   const history = (await client.query("SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 1")).rows[0];
-  assert.equal(history.hash, aiVisualMigrationConfig.migrationSha256);
-  assert.equal(Number(history.created_at), aiVisualMigrationConfig.migrationTimestamp);
+  assert.equal(history.hash, intelligentNewsroomMigrationConfig.migrationSha256);
+  assert.equal(Number(history.created_at), intelligentNewsroomMigrationConfig.migrationTimestamp);
   const catalog = (await client.query("SELECT (SELECT count(*)::integer FROM information_schema.tables WHERE table_schema='public' AND table_name=ANY($1::text[])) tables,(SELECT count(*)::integer FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public' AND t.typname=ANY($2::text[]) AND t.typtype='e') enums", [config.tables, config.enums])).rows[0];
   assert.equal(catalog.tables, config.tables.length);
   assert.equal(catalog.enums, config.enums.length);
@@ -52,7 +52,9 @@ try {
   const retained = (await client.query("SELECT (SELECT count(*)::integer FROM ai_generation_runs WHERE owner_id=$1) runs,(SELECT count(*)::integer FROM ai_content_suggestions WHERE owner_id=$1) suggestions,(SELECT count(*)::integer FROM ai_generation_evidence WHERE owner_id=$1) evidence", [ownerId])).rows[0];
   assert.deepEqual(retained, { evidence: 0, runs: 0, suggestions: 0 });
   assert.equal(await authFingerprint(), beforeAuth);
-  console.log("Development AI-content verification passed: exact migration history, tables, enums, concurrency uniqueness, editorial constraints, rollback cleanup, and managed Auth preservation.");
+  const editorialStatuses = (await client.query("SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public' AND t.typname='content_draft_status' ORDER BY e.enumsortorder")).rows.map((row) => row.enumlabel);
+  assert.deepEqual(editorialStatuses, ["draft", "ready_for_review", "needs_review", "approved", "rejected"]);
+  console.log("Development AI-content verification passed: exact migration history, editorial states, tables, enums, concurrency uniqueness, rollback cleanup, and managed Auth preservation.");
 } finally {
   client.release();
   await pool.end();

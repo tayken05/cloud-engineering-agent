@@ -183,3 +183,13 @@ The Studio exposes four distinct operations: create a blank manual draft, develo
 `content_media_assets` relates a private object to its owner, draft, and optional AI run. Generated assets require provider, model, and prompt provenance; owner uploads require no fake provider record. Composite owner foreign keys prevent cross-owner attachment. The private media routes authenticate before upload or download, reject cross-origin writes, bound PNG size and dimensions, and use no-store responses. No binary or base64 image is stored in PostgreSQL.
 
 The image-first flow is generate, validate PNG, inspect actual pixels, save privately, then create grounded copy from the inspection. The text-first flow may create a supporting image after text review. Text-only remains available. Ask Grok uses actual inspected details for its question and keeps the answer in private moderator notes; it never claims Grok responded.
+
+## Task 14: Intelligent Cloud Newsroom vertical slice
+
+`ContentStudioWorkspace` makes `Prepare a Post` the primary owner action while retaining the existing manual editor in a secondary disclosure. The Server Action authenticates the exact owner before reading source intelligence or content history. One bounded Responses API call returns one structured selected idea and complete draft; it does not expose discarded approaches or run a multi-agent loop.
+
+The service supplies at most 20 recent publisher records and up to 100 prior content summaries. Prompt and output validation require a worthwhile premise, known evidence IDs, the existing format registry, bounded text and visual fields, factual-claim classifications, X limits, and no typographic em/en dashes. Near-duplicate ideas or copy fail before content persistence. Publisher content remains untrusted data.
+
+`savePreparedContentPackage` inserts the idea, its evidence, the draft, its evidence, and an optional deterministic visual specification in one PostgreSQL transaction. Forward migration `0007_intelligent_newsroom.sql` extends the existing draft-state enum with `needs_review`, `approved`, and `rejected`; no table or managed-auth object changes. Revisions continue through optimistic version checks and the existing revision table.
+
+For a recommended image, Studio either uses the owner's remembered device permission and existing protected image action or shows an explicit pending-media state. Generated pixels are inspected and stored privately before appearing in preview. A media-based package cannot be approved without a stored owner-scoped asset. All text and image work shares existing run leases, idempotency, accounting, and the `$2` application allowance. Builds and deploys never generate content or migrate a database.

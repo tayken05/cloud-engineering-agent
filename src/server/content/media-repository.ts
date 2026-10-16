@@ -24,6 +24,12 @@ export async function listContentMediaAssets(ownerId: string): Promise<readonly 
   return rows.map(view);
 }
 
+export async function hasContentMediaAsset(ownerId: string, draftId: string): Promise<boolean> {
+  const rows = await withDatabaseTransaction((db) => db.select({ id: contentMediaAssets.id }).from(contentMediaAssets)
+    .where(and(eq(contentMediaAssets.ownerId, ownerId), eq(contentMediaAssets.draftId, draftId))).limit(1));
+  return Boolean(rows[0]);
+}
+
 export async function getContentMediaAsset(ownerId: string, assetId: string) {
   const rows = await withDatabaseTransaction((db) => db.select().from(contentMediaAssets).where(and(eq(contentMediaAssets.id, assetId), eq(contentMediaAssets.ownerId, ownerId))).limit(1));
   return rows[0] ?? null;

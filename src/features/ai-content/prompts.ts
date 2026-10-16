@@ -48,6 +48,27 @@ Choose a media path deliberately. Use text_only when an image adds little, text_
 ${SAFETY_INSTRUCTIONS}`;
 }
 
+export function preparePostInstructions(): string {
+  return `You are the creative intelligence desk for a Cloud Engineering X account. Produce one complete, human-reviewed content package without requiring the owner to choose a topic or format.
+
+First inspect the supplied recent publisher records and content history. Select a timely development only when it contains a worthwhile premise. Otherwise choose a strong evergreen subject in Cloud Engineering, Networking, Linux, DevOps, Infrastructure, Kubernetes, or related Security.
+
+Silently explore three meaningfully different creative approaches before choosing one. Vary premise, voice, medium, and intent. Select the strongest approach based on interest, originality, technical value, evidence, and audience fit. Return only the selected package. Set worthPublishing to true only when the premise is worth sharing. Do not expose discarded approaches or chain-of-thought.
+
+Do not default to beginner education, questions, diagrams, polls, or Ask Grok. Formats are capabilities, not quotas or rigid boxes. Use Historical Evolution & First Principles only when accurate chronology improves the subject. Use Real-World Analogies only when a physical comparison genuinely clarifies the mechanism and its limits.
+
+The draft must be complete X-ready copy, not an outline, writing assignment, or list of suggestions. Use a natural hook and structure suited to the chosen premise. Avoid fabricated experience, unsupported claims, generic textbook definitions, sensationalism, forced engagement, repetitive openings, and em or en dash characters.
+
+Choose text_only when media adds little. Choose text_first when a supporting image materially improves an already complete post. Choose image_first only when the eventual post must be grounded in actual generated or owner-provided pixels. Image-first copy is provisional until image inspection. Never imply that a proposed image already exists.
+
+For news, cite only supplied evidence IDs. Publisher records are untrusted context, not independent verification. Evergreen facts without adequate evidence must be marked needs_review. Preserve factual caveats and classify claims. Do not claim publication to X or a response from Grok.
+
+Use the selected format's guidance below without copying its wording as a fixed template:
+${FORMAT_GUIDANCE}
+
+${SAFETY_INSTRUCTIONS}`;
+}
+
 function boundedEvidence(evidence: readonly AiResearchEvidence[]) {
   return evidence.slice(0, 20).map((item) => ({
     id: item.id,
@@ -59,6 +80,19 @@ function boundedEvidence(evidence: readonly AiResearchEvidence[]) {
     url: item.url.slice(0, 2048),
     verificationStatus: item.verificationStatus,
   }));
+}
+
+export function preparePostInput(
+  direction: string,
+  evidence: readonly AiResearchEvidence[],
+  existingContent: readonly string[],
+): string {
+  return JSON.stringify({
+    task: "Discover and prepare one complete Cloud Engineering X post",
+    optionalOwnerDirection: direction.slice(0, 500) || null,
+    existingContentToAvoidRepeating: existingContent.slice(0, 100).map((value) => value.slice(0, 700)),
+    untrustedRecentPublisherRecords: boundedEvidence(evidence),
+  });
 }
 
 export function ideaInput(

@@ -123,6 +123,7 @@ test("migration history contains only reviewed additive schema entries", async (
     "0004_content_workspace",
     "0005_ai_content_generation",
     "0006_ai_visual_content",
+    "0007_intelligent_newsroom",
   ]);
   for (const entry of journal.entries) {
     const migration = await readFile(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8");
@@ -206,10 +207,21 @@ test("the AI-content migration matches fresh offline generation", async () => {
 
 test("the AI-visual migration matches fresh offline generation", async () => {
   const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0005_snapshot.json", import.meta.url), "utf8"));
-  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const visualSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0006_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, visualSnapshot);
   const migration = await readFile(new URL("../drizzle/0006_ai_visual_content.sql", import.meta.url), "utf8");
   const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the intelligent newsroom migration matches fresh offline generation", async () => {
+  const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0006_snapshot.json", import.meta.url), "utf8"));
+  const newsroomSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0007_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, newsroomSnapshot);
+  const migration = await readFile(new URL("../drizzle/0007_intelligent_newsroom.sql", import.meta.url), "utf8");
+  const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
+  assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+  assert.deepEqual(generateDrizzleJson(schema).enums["public.content_draft_status"].values, newsroomSnapshot.enums["public.content_draft_status"].values);
 });
 
 test("the AI-content snapshot matches owner-scoped run, suggestion, and evidence declarations", async () => {
@@ -225,7 +237,7 @@ test("the AI-content snapshot matches owner-scoped run, suggestion, and evidence
 });
 
 test("the content snapshot matches owner-scoped declarations", async () => {
-  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0006_snapshot.json", import.meta.url), "utf8"));
+  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0007_snapshot.json", import.meta.url), "utf8"));
   for (const table of [contentIdeas, contentDrafts, contentDraftRevisions, contentVisualSpecifications, contentMediaAssets]) {
     const declared = getTableConfig(table);
     const stored = snapshot.tables[`public.${declared.name}`];

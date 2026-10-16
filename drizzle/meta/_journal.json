@@ -50,6 +50,13 @@
       "when": 1792143556764,
       "tag": "0006_ai_visual_content",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792180312761,
+      "tag": "0007_intelligent_newsroom",
+      "breakpoints": true
     }
   ]
 }

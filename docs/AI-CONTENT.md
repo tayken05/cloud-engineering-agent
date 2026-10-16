@@ -14,7 +14,7 @@ News requests receive at most 20 recent collected publisher records. Evergreen r
 
 All 20 Content Studio formats remain available through one registry. Historical Evolution & First Principles requires the original problem, early mechanisms, limitations, later changes, and careful chronology. Real-World Analogies separately requires a physical mapping, the real technical mechanism, and the analogy's limits. Other formats receive their own established guidance.
 
-Ideas are stored as proposed AI suggestions. The owner may accept one into Content Ideas or reject it with feedback. Draft generation checks and saves the selected format before the request, requires an explicit subject for a new blank draft, and distinguishes a new subject from another treatment of the current idea. A new subject detaches stale idea state. Existing idea and draft text is supplied for near-duplicate rejection. Nothing is marked published.
+Ideas may still be generated as a reviewable 3–5 proposal batch. The primary Studio path now prepares one finished package directly: it uses recent publisher records or evergreen knowledge, compares a bounded set of distinct treatments internally, selects one worthwhile premise, and atomically saves the chosen idea and draft. Optional owner direction never becomes a required topic or format. Existing idea and draft text is supplied for near-duplicate rejection. Nothing is marked published.
 
 Primary editorial subjects are Cloud Engineering, Networking, Linux, DevOps, Infrastructure, Kubernetes, and related Security. Generic programming examples are used only when they directly clarify those domains. Format-specific guidance varies hook, depth, shape, and ending, while forbidding fabricated experiences, invented quotes, forced engagement, and generic textbook definitions. Generated publishable copy and visual text reject Unicode em and en dashes; ordinary technical hyphens remain valid.
 
@@ -61,3 +61,9 @@ The application allowance is not a provider billing ceiling. Provider project bu
 The owner-approved production allowance is `$2` per calendar month at the application layer. Text generation is enabled. Image generation is also enabled for deliberate owner actions at low quality, with a conservative `$0.03` reservation for one image plus inspection. The private Blob store is linked, but this follow-up made no real image request and the store remained empty after deployment.
 
 Before increasing the allowance, changing model or quality, or running a first paid image request, review current provider pricing and the remaining application allowance. Keep provider-side budgets and alerts in place. Do not prefix any credential or control with `NEXT_PUBLIC_`.
+
+## Intelligent Newsroom editorial flow
+
+The prepared package carries finished X copy, format-specific explanation, classified claims, evidence IDs, media recommendation, and private review notes. Text-only packages can enter `ready_for_review`; unsupported facts, validation flags, and packages awaiting media enter `needs_review`. The owner may approve, revise, reject with optional feedback, or copy only the final post text. Revision preserves prior copy through the existing revision mechanism. Approved remains an editorial state and never means published.
+
+The prompt treats the 20 formats as capabilities rather than a schedule or catalogue. It explicitly avoids defaulting to beginner explainers, questions, diagrams, polls, or Ask Grok. A weak candidate is rejected by the structured `worthPublishing` gate, and near-duplicate premises or copy are rejected against PostgreSQL content history. Creative quality still requires a deliberate owner-run generation test; mocked tests only establish workflow, validation, variation support, and safety.

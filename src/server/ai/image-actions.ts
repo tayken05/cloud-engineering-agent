@@ -72,7 +72,7 @@ export async function generateAiImageAction(value: unknown): Promise<ImageAction
           imageDescription: generated.description, intent: "develop_current", ownerId, provider: createOpenAiProvider(textConfig, apiKey), store: runStore, subject: draft.title,
         });
         if (!output.output) throw new AiGenerationError("duplicate_request", "The grounded caption request was already processed.");
-        await saveContentDraft(ownerId, { ...draft, caption: output.output.caption, explanation: `${output.output.explanation}\n\nInspected image: ${generated.description}`, imageAltText: generated.asset.altText, moderatorNotes: [output.output.moderatorNotes, ...output.output.reviewFlags].filter(Boolean).join("\n"), pollOptions: output.output.pollOptions, status: "draft", threadPosts: output.output.threadPosts, title: output.output.title, visual: output.output.visual });
+        await saveContentDraft(ownerId, { ...draft, caption: output.output.caption, explanation: `${output.output.explanation}\n\nInspected image: ${generated.description}`, imageAltText: generated.asset.altText, moderatorNotes: [output.output.moderatorNotes, `AI verification: ${output.output.verificationStatus}.`, ...output.output.reviewFlags].filter(Boolean).join("\n"), pollOptions: output.output.pollOptions, status: output.output.verificationStatus === "needs_review" || output.output.reviewFlags.length > 0 ? "needs_review" : "ready_for_review", threadPosts: output.output.threadPosts, title: output.output.title, visual: output.output.visual });
         nextState = await loadContentWorkspace(ownerId);
       } catch {
         revalidatePath("/studio");
@@ -86,6 +86,11 @@ export async function generateAiImageAction(value: unknown): Promise<ImageAction
       }
     }
     revalidatePath("/studio");
+    if (draft.mediaPath === "text_first") {
+      const status = draft.moderatorNotes.includes("AI verification: evidence_backed.") ? "ready_for_review" : "needs_review";
+      await saveContentDraft(ownerId, { ...draft, status });
+      nextState = await loadContentWorkspace(ownerId);
+    }
     return { asset: generated.asset, groundedDraftSaved: draft.mediaPath === "image_first", ok: true, state: nextState };
   } catch (error) {
     return { error: safe(error), ok: false };

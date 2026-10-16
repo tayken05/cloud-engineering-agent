@@ -115,6 +115,31 @@ export async function saveContentDraft(ownerId: string, input: unknown): Promise
   });
 }
 
+export async function savePreparedContentPackage(ownerId: string, ideaInput: unknown, draftInput: unknown): Promise<void> {
+  const idea = validateIdeaInput(ideaInput);
+  const draft = validateDraftInput(draftInput);
+  if (draft.ideaId !== idea.id) throw new Error("The prepared draft must reference its prepared idea.");
+  await withDatabaseTransaction(async (tx) => {
+    await tx.insert(contentIdeas).values({
+      id: idea.id, ownerId, subject: idea.subject, technicalCategory: idea.technicalCategory,
+      formatId: idea.formatId, audience: idea.audience, educationalObjective: idea.educationalObjective,
+      engagementStyle: idea.engagementStyle, notes: idea.notes, status: idea.status, recordVersion: 1,
+    });
+    if (idea.evidence.length) await tx.insert(contentIdeaSourceItems).values(idea.evidence.map((item) => ({ ideaId: idea.id, ownerId, sourceItemId: item.id })));
+    await tx.insert(contentDrafts).values({
+      id: draft.id, ownerId, ideaId: draft.ideaId, formatId: draft.formatId, title: draft.title,
+      caption: draft.caption, explanation: draft.explanation, imageAltText: draft.imageAltText || null,
+      imagePrompt: draft.imagePrompt || null, mediaPath: draft.mediaPath, moderatorNotes: draft.moderatorNotes,
+      threadPosts: [...draft.threadPosts], pollOptions: [...draft.pollOptions], status: draft.status, recordVersion: 1,
+    });
+    if (draft.evidence.length) await tx.insert(contentDraftSourceItems).values(draft.evidence.map((item) => ({ draftId: draft.id, ownerId, sourceItemId: item.id })));
+    if (draft.visual) {
+      const size = dimensions(draft.visual);
+      await tx.insert(contentVisualSpecifications).values({ draftId: draft.id, ownerId, ...draft.visual, ...size });
+    }
+  });
+}
+
 export async function restoreDraftRevision(ownerId: string, draftId: string, revisionId: string, expectedVersion: number): Promise<void> {
   const revision = await withDatabaseTransaction((db) => db.select().from(contentDraftRevisions).where(and(eq(contentDraftRevisions.id, revisionId), eq(contentDraftRevisions.draftId, draftId), eq(contentDraftRevisions.ownerId, ownerId))).limit(1));
   const current = await loadContentWorkspace(ownerId);

@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 
 import type { ContentDraft, ContentIdea, ContentWorkspaceState, IdeaStatus } from "@/features/content-studio/content-types";
-import { blankDraft } from "@/features/content-studio/content-workspace";
+import { blankDraft, validateDraft } from "@/features/content-studio/content-workspace";
 import type { ContentFormatId } from "@/features/content-studio/content-formats";
 import { getRequiredOwnerId } from "@/server/auth/owner";
+import { hasContentMediaAsset } from "./media-repository";
 import { ContentConflictError, importContentWorkspace, loadContentWorkspace, restoreDraftRevision, saveContentDraft, saveContentIdea } from "./workspace-repository";
 
 export type WorkspaceActionResult = Readonly<{ ok: boolean; state?: ContentWorkspaceState; error?: string; conflict?: boolean; importResult?: Readonly<{ imported: number; skipped: number; failed: number }> }>;
@@ -53,6 +54,42 @@ export async function createDraftFromIdeaAction(input: ContentIdea): Promise<Wor
 export async function saveDraftAction(input: ContentDraft): Promise<WorkspaceActionResult> {
   const ownerId = await getRequiredOwnerId();
   try { await saveContentDraft(ownerId, input); return await refreshed(ownerId); } catch (error) { return { ok: false, ...safeError(error) }; }
+}
+
+export async function reviewDraftAction(
+  draftId: string,
+  expectedVersion: number,
+  decision: "approve" | "reject",
+  feedback = "",
+): Promise<WorkspaceActionResult> {
+  const ownerId = await getRequiredOwnerId();
+  if (!/^(draft|starter-draft)-[a-z0-9-]+$/.test(draftId) || !Number.isInteger(expectedVersion)
+    || expectedVersion < 1 || !["approve", "reject"].includes(decision) || feedback.length > 1000) {
+    return { ok: false, error: "The editorial decision is invalid." };
+  }
+  try {
+    const state = await loadContentWorkspace(ownerId);
+    const draft = state.drafts.find((item) => item.id === draftId);
+    if (!draft || draft.recordVersion !== expectedVersion) throw new ContentConflictError();
+    if (decision === "approve") {
+      const problems = validateDraft(draft);
+      if (problems.length > 0) return { ok: false, error: `Resolve the X preflight checks before approval: ${problems[0]}` };
+      if (draft.mediaPath !== "text_only" && !(await hasContentMediaAsset(ownerId, draft.id))) {
+        return { ok: false, error: "Generate or attach the reviewed image before approving this media-based post, or change it to Text only." };
+      }
+    }
+    const rejectionNote = decision === "reject" && feedback.trim()
+      ? `${draft.moderatorNotes}${draft.moderatorNotes ? "\n\n" : ""}Editorial rejection: ${feedback.trim()}`
+      : draft.moderatorNotes;
+    await saveContentDraft(ownerId, {
+      ...draft,
+      moderatorNotes: rejectionNote.slice(0, 6000),
+      status: decision === "approve" ? "approved" : "rejected",
+    });
+    return await refreshed(ownerId);
+  } catch (error) {
+    return { ok: false, ...safeError(error) };
+  }
 }
 
 export async function restoreDraftRevisionAction(draftId: string, revisionId: string, expectedVersion: number): Promise<WorkspaceActionResult> {

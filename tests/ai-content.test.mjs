@@ -138,7 +138,7 @@ test("all 20 formats remain unified with separate first-principles and analogy g
 
 test("every AI Server Action authorizes the owner before provider or content access", async () => {
   const source = await readFile(new URL("../src/server/ai/actions.ts", import.meta.url), "utf8");
-  for (const name of ["getAiWorkspaceStatus", "generateAiIdeasAction", "reviewAiIdeaAction", "generateAiDraftAction"]) {
+  for (const name of ["getAiWorkspaceStatus", "generateAiIdeasAction", "prepareAiPostAction", "reviewAiIdeaAction", "generateAiDraftAction"]) {
     const start = source.indexOf(`export async function ${name}`);
     assert.ok(start >= 0, `${name} must exist`);
     const next = source.indexOf("export async function ", start + 24);

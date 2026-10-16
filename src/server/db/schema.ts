@@ -80,7 +80,7 @@ export const contentFormat = pgEnum("content_format", [
 export const contentAudience = pgEnum("content_audience", ["beginner", "intermediate", "advanced", "mixed"]);
 export const contentIdeaStatus = pgEnum("content_idea_status", ["captured", "approved", "drafted", "archived"]);
 export const contentEngagementStyle = pgEnum("content_engagement_style", ["teach", "discuss", "challenge", "ask", "entertain"]);
-export const contentDraftStatus = pgEnum("content_draft_status", ["draft", "ready_for_review"]);
+export const contentDraftStatus = pgEnum("content_draft_status", ["draft", "ready_for_review", "needs_review", "approved", "rejected"]);
 export const contentVisualTemplate = pgEnum("content_visual_template", [
   "cloud-architecture", "network-troubleshooting", "educational-fact", "technical-comparison",
   "question-answer", "visual-analogy",

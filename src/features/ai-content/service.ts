@@ -1,18 +1,22 @@
 import type { ContentDraft, ContentIdea } from "../content-studio/content-types.ts";
-import { draftInput, draftInstructions, ideaInput, ideaInstructions } from "./prompts.ts";
+import { draftInput, draftInstructions, ideaInput, ideaInstructions, preparePostInput, preparePostInstructions } from "./prompts.ts";
 import {
   draftOutputSchema,
   ideaOutputSchema,
   isNearDuplicate,
+  preparedPostOutputSchema,
   requestFingerprint,
   validateDraftOutput,
   validateIdeaRequest,
   validateIdeaSuggestions,
+  validatePreparedPostOutput,
+  validatePreparePostRequest,
 } from "./validation.ts";
 import {
   AiGenerationError,
   type AiDraftOutput,
   type AiIdeaSuggestion,
+  type AiPreparedPostOutput,
   type AiResearchEvidence,
   type AiRunStore,
   type AiRuntimeConfig,
@@ -21,6 +25,7 @@ import {
 
 const IDEA_MAX_OUTPUT_TOKENS = 3_200;
 const DRAFT_MAX_OUTPUT_TOKENS = 4_800;
+const PREPARED_POST_MAX_OUTPUT_TOKENS = 6_000;
 
 function ensureEnabled(config: AiRuntimeConfig) {
   if (!config.enabled) throw new AiGenerationError("disabled", "AI generation is disabled by configuration.");
@@ -84,6 +89,61 @@ export async function generateIdeaBatch(input: Readonly<{
     return { duplicate: false, runId: reservation.runId, suggestions };
   } catch (error) {
     const safe = error instanceof AiGenerationError ? error : new AiGenerationError("provider_failure", "AI idea generation failed.");
+    await input.store.fail({ errorCode: safe.code, ownerId: input.ownerId, runId: reservation.runId });
+    throw safe;
+  }
+}
+
+export async function preparePost(input: Readonly<{
+  config: AiRuntimeConfig;
+  evidence: readonly AiResearchEvidence[];
+  existingContent: readonly string[];
+  ownerId: string;
+  provider: AiTextProvider;
+  request: unknown;
+  store: AiRunStore;
+}>): Promise<Readonly<{ duplicate: boolean; output: AiPreparedPostOutput | null; runId: string }>> {
+  ensureEnabled(input.config);
+  const request = validatePreparePostRequest(input.request);
+  const evidence = input.evidence.slice(0, 20);
+  const allowedEvidence = new Set(evidence.map((item) => item.id));
+  const instructions = preparePostInstructions();
+  const providerInput = preparePostInput(request.direction, evidence, input.existingContent);
+  const reservationMicrousd = estimateCostMicrousd(input.config, estimatedInputTokens(`${instructions}\n${providerInput}`), PREPARED_POST_MAX_OUTPUT_TOKENS);
+  const fingerprint = requestFingerprint({ direction: request.direction, evidenceIds: [...allowedEvidence].sort(), history: input.existingContent.slice(0, 100) });
+  const reservation = await input.store.begin({
+    evidenceIds: [...allowedEvidence], fingerprint, idempotencyKey: request.idempotencyKey,
+    kind: "draft", model: input.provider.model, monthlyBudgetMicrousd: input.config.monthlyBudgetMicrousd,
+    ownerId: input.ownerId, provider: input.provider.id, requestedCount: 1, reservationMicrousd,
+  });
+  if (reservation.duplicate) return { duplicate: true, output: null, runId: reservation.runId };
+  try {
+    const signal = AbortSignal.timeout(input.config.requestTimeoutMs);
+    const result = await input.provider.generateStructured({
+      input: providerInput,
+      instructions,
+      maxOutputTokens: PREPARED_POST_MAX_OUTPUT_TOKENS,
+      schema: preparedPostOutputSchema(),
+      schemaName: "cloud_prepared_post",
+      signal,
+    });
+    const output = validatePreparedPostOutput(result.data, allowedEvidence);
+    if (isNearDuplicate(`${output.idea.title} ${output.idea.technicalSubject}`, input.existingContent)
+      || isNearDuplicate(`${output.draft.title} ${output.draft.caption} ${output.draft.threadPosts.join(" ")}`, input.existingContent)) {
+      throw new AiGenerationError("invalid_output", "The prepared post repeated existing content.");
+    }
+    await input.store.complete({
+      estimatedCostMicrousd: estimateCostMicrousd(input.config, result.inputTokens, result.outputTokens),
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      ownerId: input.ownerId,
+      responseId: result.responseId,
+      runId: reservation.runId,
+      suggestions: [{ kind: "draft", payload: payload(output), verificationStatus: output.draft.verificationStatus }],
+    });
+    return { duplicate: false, output, runId: reservation.runId };
+  } catch (error) {
+    const safe = error instanceof AiGenerationError ? error : new AiGenerationError("provider_failure", "Prepare a Post failed.");
     await input.store.fail({ errorCode: safe.code, ownerId: input.ownerId, runId: reservation.runId });
     throw safe;
   }

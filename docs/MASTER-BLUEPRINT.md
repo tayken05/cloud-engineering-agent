@@ -95,9 +95,8 @@ Planned information requirements:
 
 ## Planned product capabilities
 
-The Jobs & Opportunities Hub presents verified official listings and directs applicants to employer websites. The private persistent Content Studio supports ideas, drafts, revisions, X previews, deterministic PNG visuals, and disabled-by-default AI-assisted idea/draft workflows. The following capabilities remain planned:
+The Jobs & Opportunities Hub presents verified official listings and directs applicants to employer websites. The private persistent Content Studio supports ideas, drafts, revisions, X previews, deterministic PNG visuals, owner-triggered AI preparation, and optional owner-authorized private AI images. Source-control defaults remain disabled and zero-budget; production uses the separately approved server configuration and shared `$2` application allowance. The following capabilities remain planned:
 
-- Production AI generation after explicit budget approval and provider credential configuration.
 - Human-reviewed manual X publishing.
 - Published post tracking.
 - Conversation hubs and a Shared Inbox.
@@ -140,4 +139,10 @@ The Content Ideas and Content Studio workspaces now use managed Neon Auth, exact
 
 The owner-only Ideas and Studio routes now contain a modular OpenAI Responses API integration with strict structured outputs, bounded 3–5 idea batches, evidence-aware prompts, format-specific drafting, deterministic visual specifications, editorial accept/reject states, request idempotency, leases, and atomic monthly allowance reservation. Collected publisher records remain untrusted research input and never become system instructions or independent verification. AI output always requires human review.
 
-`AI_GENERATION_ENABLED=false`, `AI_IMAGE_GENERATION_ENABLED=false`, and `AI_MONTHLY_BUDGET_USD=0` remain the source-control defaults. Production uses the separately approved allowance and server-only credential. No image request runs automatically or during tests, and no scheduled AI job exists. See `docs/AI-CONTENT.md` for activation and review rules.
+`AI_GENERATION_ENABLED=false`, `AI_IMAGE_GENERATION_ENABLED=false`, and `AI_MONTHLY_BUDGET_USD=0` remain the source-control defaults. Production uses the separately approved allowance and server-only credential. A recommended image may run only inside an owner-initiated Prepare request after reusable owner permission; no paid request runs during tests, and no scheduled AI job exists. See `docs/AI-CONTENT.md` for activation and review rules.
+
+## Implemented Intelligent Cloud Newsroom (Task 14)
+
+Content Studio now presents `Prepare a Post` as its primary workflow. One owner-authorized request selects either a useful recent publisher opportunity or a strong evergreen subject, checks saved content history, compares a bounded set of distinct creative treatments internally, chooses one worthwhile premise, and saves one complete idea/draft package. Topic, format, audience, and objective are optional owner direction rather than required form fields.
+
+The workflow follows `CREATIVE-INTELLIGENCE-CHARTER.md`: the 20 formats remain flexible capabilities, the two teaching styles stay independent, and examples never become fixed prompt templates. Finished packages expose factual and media review state, evidence, actual stored media when present, and Approve, Revise, Reject, and Copy actions. Nothing publishes to X. Media generation still requires reusable owner permission and available shared allowance.

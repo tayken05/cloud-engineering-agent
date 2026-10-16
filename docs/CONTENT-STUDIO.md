@@ -68,6 +68,10 @@ The Ideas workspace can request a bounded 3–5 proposal batch from either recen
 
 The Studio can generate or revise one saved draft with its selected format and optional angle. Validated output is saved through the existing optimistic-concurrency path and adds a revision checkpoint. Source-backed facts, interpretations, and hypothetical examples remain classified. Needs Review flags identify missing evidence, unsafe commands, historical uncertainty, incomplete analogies, and formatting problems.
 
+`Prepare a Post` is the primary Studio entry point. It requires no topic, title, audience, objective, or format. The newsroom selects and saves one complete package, then keeps that draft selected through the URL and database state so refresh or reopening returns to the same item. The finished panel shows actual copy, actual private media when present, status, evidence/review details, and Approve, Revise, Reject, and Copy. Manual editing and the prior idea-batch workflow remain available as secondary tools.
+
+Editorial state is explicit: `ready_for_review`, `needs_review`, `approved`, or `rejected`. Preparing is represented by the active generation run and UI progress, not a misleading saved post state. Publication is not implemented. Revision saves the current version before requesting a different treatment, while rejection may retain bounded feedback in private moderator notes.
+
 OpenAI integration is server-only and uses strict Responses API structured output. It is unavailable unless an exact owner session, enable flag, server key, and positive monthly allowance all exist. Production uses the owner-approved `$2` shared application allowance. Automated tests use mocked provider output, and this follow-up made no paid image request. See `docs/AI-CONTENT.md`.
 
 ## Owner-initiated AI image workflow

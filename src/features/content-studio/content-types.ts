@@ -9,7 +9,7 @@ export const TECHNICAL_CATEGORIES = [
 
 export const AUDIENCE_LEVELS = ["beginner", "intermediate", "advanced", "mixed"] as const;
 export const IDEA_STATUSES = ["captured", "approved", "drafted", "archived"] as const;
-export const DRAFT_STATUSES = ["draft", "ready_for_review"] as const;
+export const DRAFT_STATUSES = ["draft", "ready_for_review", "needs_review", "approved", "rejected"] as const;
 export const ENGAGEMENT_STYLES = ["teach", "discuss", "challenge", "ask", "entertain"] as const;
 export const VISUAL_TEMPLATES = [
   "cloud-architecture",

@@ -143,14 +143,14 @@ When separately authorized, design deterministic story grouping and evidence rev
 
 Develop the private hub across all ten subject areas defined in `MASTER-BLUEPRINT.md`. Plan personalized feeds, bookmarks, configurable digests, source freshness, and continuously updated ingestion. Keep private information separate from the public content workflow.
 
-## Task 13: AI content intelligence, ideas, and drafting — implemented, disabled by default
+## Task 13: AI content intelligence, ideas, and drafting — implemented and owner enabled
 
 - Added a provider-neutral text-generation layer and OpenAI Responses API adapter with strict structured outputs, safe timeouts/retries/cancellation, mocked tests, and no build-time or module-initialization request.
 - Added bounded news-backed and evergreen idea discovery, duplicate checks against saved ideas/drafts, evidence references, Needs Review safeguards, editorial accept/reject decisions, and 3–5 result batches.
 - Added owner-triggered draft generation through the existing Content Studio, including format-specific posts/threads/polls, claim classification, X preflight rules, revision-preserving persistence, and safe deterministic visual specifications.
 - Preserved all 20 formats and separate first-principles/analogy behavior. Manual creation remains available; AI output is never auto-approved or published.
 - Added owner-scoped generation runs, evidence, suggestions, leases, idempotency, usage/cost accounting, and atomic allowance reservation through forward migration `0005_ai_content_generation.sql`. Development and production are migrated; managed Auth and existing data are unchanged.
-- Production generation remains unavailable: enabled defaults false, monthly allowance defaults zero, no paid request was made, and no AI Cron exists. Later activation requires explicit owner budget approval, a server-only key, current model/pricing review, and a redeploy.
+- Source-control defaults still fail closed, but production text generation is owner enabled with a server-only key and the approved `$2` shared monthly application allowance. Image generation remains a deliberate owner action with its own conservative reservation. No AI Cron exists, and the application allowance is not a provider-side billing ceiling.
 
 ## Task 13 follow-up: Editorial quality and visual-first generation — implemented
 
@@ -159,6 +159,14 @@ Develop the private hub across all ten subject areas defined in `MASTER-BLUEPRIN
 - Added text-only, text-first, and image-first editorial paths. OpenAI image creation remains an explicit owner action; the returned pixels are inspected before grounded copy is written.
 - Added owner-scoped private image metadata and Vercel Blob persistence through forward migration `0006_ai_visual_content.sql`. Development and production have the migration; no paid image test was run.
 - Keep published-post memory, media lifecycle controls, AI image editing, and alternate image providers for later authorized phases.
+
+## Task 14: Intelligent Cloud Newsroom — implemented
+
+- Added one primary `Prepare a Post` action in Content Studio. A subject and format are optional: the owner-authorized server workflow examines recent publisher records and saved content history, selects one worthwhile non-repetitive premise, and returns one complete saved X package.
+- Reused the existing OpenAI provider, 20-format registry, evidence validation, revision history, owner authorization, private media, and shared `$2` spending guard. Manual ideas and drafting remain available as secondary tools.
+- Added explicit ready, needs-review, approved, and rejected editorial states through forward migration `0007_intelligent_newsroom.sql`. These states never imply that content was published to X.
+- Added direct Approve, Revise, Reject, and Copy actions, persisted selection, expandable evidence/review notes, and truthful actual-image or pending-image presentation. Media generation remains owner authorized and idempotent.
+- Automated tests use varied mocked premises and make no paid request. A real owner-initiated generation remains the required test of editorial taste and actual provider output.
 
 ## Planned phase: Human-reviewed X workflow
 

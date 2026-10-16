@@ -7,7 +7,7 @@ import { loadDevelopmentCredential } from "./source-catalog-guard.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const credential = await loadDevelopmentCredential(root);
 process.env.DATABASE_URL = credential.pooledConnectionString;
-const { ContentConflictError, importContentWorkspace, loadContentWorkspace, restoreDraftRevision, saveContentDraft, saveContentIdea } = await import("../src/server/content/workspace-repository.ts");
+const { ContentConflictError, importContentWorkspace, loadContentWorkspace, restoreDraftRevision, saveContentDraft, saveContentIdea, savePreparedContentPackage } = await import("../src/server/content/workspace-repository.ts");
 
 const ownerId = `task12_test_${crypto.randomUUID().replaceAll("-", "_")}`;
 const suffix = crypto.randomUUID();
@@ -36,7 +36,18 @@ try {
   workspace = await loadContentWorkspace(ownerId); assert.equal(workspace.drafts[0].recordVersion, 3); assert.equal(workspace.drafts[0].caption, draft.caption);
   const imported = await importContentWorkspace(ownerId, { version: 1, ideas: [idea], drafts: [draft] });
   assert.deepEqual(imported, { imported: 0, skipped: 2, failed: 0 });
-  console.log("Development content persistence verified: ownership, reload, visual specification, revisions, restore, optimistic concurrency, and idempotent import.");
+  const preparedIdeaId = `idea-${crypto.randomUUID()}`;
+  const preparedDraftId = `draft-${crypto.randomUUID()}`;
+  await savePreparedContentPackage(ownerId, { ...idea, id: preparedIdeaId, status: "drafted", subject: "Atomic newsroom package" }, {
+    ...draft, id: preparedDraftId, ideaId: preparedIdeaId, status: "needs_review", title: "Atomic newsroom package",
+  });
+  workspace = await loadContentWorkspace(ownerId);
+  const prepared = workspace.drafts.find((item) => item.id === preparedDraftId);
+  assert.equal(prepared?.status, "needs_review");
+  await saveContentDraft(ownerId, { ...prepared, status: "approved" });
+  workspace = await loadContentWorkspace(ownerId);
+  assert.equal(workspace.drafts.find((item) => item.id === preparedDraftId)?.status, "approved");
+  console.log("Development content persistence verified: ownership, atomic newsroom package, editorial states, reload, visual specification, revisions, restore, optimistic concurrency, and idempotent import.");
 } finally {
   const client = await pool.connect();
   try { await client.query("DELETE FROM public.content_drafts WHERE owner_id=$1", [ownerId]); await client.query("DELETE FROM public.content_ideas WHERE owner_id=$1", [ownerId]); } finally { client.release(); await pool.end(); clearTimeout(keepAlive); }

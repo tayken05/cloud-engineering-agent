@@ -38,6 +38,11 @@ export type AiIdeaRequest = Readonly<{
   topic: string;
 }>;
 
+export type AiPreparePostRequest = Readonly<{
+  direction: string;
+  idempotencyKey: string;
+}>;
+
 export type AiIdeaSuggestion = Readonly<{
   audience: AudienceLevel;
   contentAngle: string;
@@ -91,6 +96,13 @@ export type AiDraftOutput = Readonly<{
   title: string;
   verificationStatus: AiVerificationStatus;
   visual: VisualSpecification | null;
+}>;
+
+export type AiPreparedPostOutput = Readonly<{
+  draft: AiDraftOutput;
+  idea: AiIdeaSuggestion;
+  selectionRationale: string;
+  worthPublishing: true;
 }>;
 
 export type AiProviderRequest = Readonly<{
