@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "@neondatabase/serverless";
 
 import { aiContentMigrationConfig as config } from "./ai-content-migration.config.mjs";
+import { aiVisualMigrationConfig } from "./ai-visual-migration.config.mjs";
 import { loadDevelopmentCredential, sourceCatalogConfig } from "./source-catalog-guard.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,8 +30,8 @@ try {
   const identity = (await client.query("SELECT current_database() database_name,current_schema() current_schema")).rows[0];
   assert.deepEqual(identity, { database_name: "neondb", current_schema: "public" });
   const history = (await client.query("SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 1")).rows[0];
-  assert.equal(history.hash, config.migrationSha256);
-  assert.equal(Number(history.created_at), config.migrationTimestamp);
+  assert.equal(history.hash, aiVisualMigrationConfig.migrationSha256);
+  assert.equal(Number(history.created_at), aiVisualMigrationConfig.migrationTimestamp);
   const catalog = (await client.query("SELECT (SELECT count(*)::integer FROM information_schema.tables WHERE table_schema='public' AND table_name=ANY($1::text[])) tables,(SELECT count(*)::integer FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public' AND t.typname=ANY($2::text[]) AND t.typtype='e') enums", [config.tables, config.enums])).rows[0];
   assert.equal(catalog.tables, config.tables.length);
   assert.equal(catalog.enums, config.enums.length);

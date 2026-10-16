@@ -5,6 +5,7 @@ import {
   ENGAGEMENT_STYLES,
   IDEA_STATUSES,
   TECHNICAL_CATEGORIES,
+  CONTENT_MEDIA_PATHS,
   VISUAL_ASPECTS,
   VISUAL_TEMPLATES,
   type ContentDraft,
@@ -19,6 +20,7 @@ export const CONTENT_WORKSPACE_STORAGE_KEY = "cloud-agent-content-workspace-v1";
 export const CONTENT_WORKSPACE_MAX_BYTES = 1_000_000;
 export const X_POST_CHARACTER_LIMIT = 280;
 export const X_POLL_OPTION_LIMIT = 25;
+export const FORBIDDEN_POST_DASHES = /[\u2013\u2014]/u;
 
 const MAX_IDEAS = 100;
 const MAX_DRAFTS = 100;
@@ -99,6 +101,11 @@ function snapshotFrom(value: Record<string, unknown>): DraftSnapshot {
   return {
     caption: text(value.caption, 4000),
     explanation: text(value.explanation, 12_000),
+    formatId: member(value.formatId, CONTENT_FORMAT_IDS, "beginner-friendly-education"),
+    ideaId: typeof value.ideaId === "string" ? value.ideaId.slice(0, 128) : null,
+    imageAltText: text(value.imageAltText, 1000),
+    imagePrompt: text(value.imagePrompt, 4000),
+    mediaPath: member(value.mediaPath, CONTENT_MEDIA_PATHS, "text_only"),
     moderatorNotes: text(value.moderatorNotes, 6000),
     pollOptions: Array.isArray(value.pollOptions) ? value.pollOptions.slice(0, 4).map((item) => text(item, 100)) : [],
     threadPosts: Array.isArray(value.threadPosts) ? value.threadPosts.slice(0, 20).map((item) => text(item, 4000)) : [],
@@ -191,6 +198,9 @@ export function validateDraft(draft: ContentDraft): readonly string[] {
   }
   if (draft.formatId === "breaking-technology-updates" && draft.evidence.length === 0) problems.push("Breaking updates require at least one publisher source.");
   if ((draft.formatId === "ask-grok" || draft.formatId === "troubleshooting-challenges") && !draft.moderatorNotes.trim()) problems.push("Add correct-answer or moderator notes before review.");
+  if (draft.mediaPath !== "text_only" && (!draft.imagePrompt.trim() || !draft.imageAltText.trim())) problems.push("Add a reviewed image brief and alt text before review.");
+  const publishableText = [draft.title, draft.caption, ...draft.threadPosts, ...draft.pollOptions, draft.visual?.title ?? "", draft.visual?.subtitle ?? "", draft.visual?.caption ?? "", draft.visual?.leftLabel ?? "", draft.visual?.rightLabel ?? ""];
+  if (publishableText.some((value) => FORBIDDEN_POST_DASHES.test(value))) problems.push("Replace em dashes and en dashes before review. Ordinary technical hyphens are allowed.");
   return problems;
 }
 
@@ -221,10 +231,11 @@ export function createStarterWorkspace(): ContentWorkspaceState {
   ];
   const drafts: ContentDraft[] = [
     {
-      caption: "A server can answer by IP while its hostname still fails. @grok, which layer would you inspect first—and what evidence would confirm it?",
+      caption: "A server can answer by IP while its hostname still fails. @grok, which layer would you inspect first, and what evidence would confirm it?",
       createdAt: now, evidence: [],
       explanation: "The visual separates reachability from name resolution. The prompt asks for evidence before a configuration change.",
       formatId: "ask-grok", id: "starter-draft-dns-challenge", ideaId: "starter-idea-dns-challenge",
+      imageAltText: "", imagePrompt: "", mediaPath: "text_only",
       moderatorNotes: "Expected direction: inspect DNS resolution, resolver configuration, query response, and relevant DNS records. An IP test alone does not validate DNS.",
       pollOptions: [], recordVersion: 1, revisions: [], status: "draft", threadPosts: [], title: "Reachable by IP. Missing by name.", updatedAt: now,
       visual: {
@@ -242,6 +253,11 @@ export function snapshotDraft(draft: ContentDraft): DraftSnapshot {
   return {
     caption: draft.caption,
     explanation: draft.explanation,
+    formatId: draft.formatId,
+    ideaId: draft.ideaId,
+    imageAltText: draft.imageAltText,
+    imagePrompt: draft.imagePrompt,
+    mediaPath: draft.mediaPath,
     moderatorNotes: draft.moderatorNotes,
     pollOptions: draft.pollOptions,
     threadPosts: draft.threadPosts,
@@ -254,6 +270,7 @@ export function blankDraft(formatId: ContentFormatId, now: string, id: string): 
   const format = getContentFormat(formatId);
   return {
     caption: "", createdAt: now, evidence: [], explanation: "", formatId, id, ideaId: null,
+    imageAltText: "", imagePrompt: "", mediaPath: "text_only",
     moderatorNotes: "", pollOptions: format.mode === "poll" ? ["", ""] : [], recordVersion: 1, revisions: [],
     status: "draft", threadPosts: format.mode === "thread" ? ["", ""] : [], title: "", updatedAt: now, visual: null,
   };

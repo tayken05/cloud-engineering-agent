@@ -5,7 +5,6 @@ import {
   CONTENT_FORMATS,
   getContentFormat,
 } from "../src/features/content-studio/content-formats.ts";
-import { PLANNED_IMAGE_PROVIDERS } from "../src/features/content-studio/image-provider.ts";
 import { VISUAL_TEMPLATES } from "../src/features/content-studio/content-types.ts";
 import {
   countXCharacters,
@@ -64,6 +63,7 @@ test("X preflight validates post, thread, poll, source, and moderator constraint
   assert.ok(validateDraft({ ...askGrok, formatId: "breaking-technology-updates", evidence: [] }).some((problem) => /publisher source/.test(problem)));
   assert.ok(validateDraft({ ...askGrok, formatId: "polls-interactive-questions", pollOptions: ["only one"] }).some((problem) => /two to four/.test(problem)));
   assert.ok(validateDraft({ ...askGrok, formatId: "threads-learning-series", threadPosts: ["one"] }).some((problem) => /at least two/.test(problem)));
+  assert.ok(validateDraft({ ...askGrok, caption: "A route — and a failure" }).some((problem) => /em dashes and en dashes/.test(problem)));
 });
 
 test("all six deterministic visual specifications support square and landscape exports", () => {
@@ -75,9 +75,4 @@ test("all six deterministic visual specifications support square and landscape e
     assert.doesNotMatch(JSON.stringify(visual), /data:image|base64/i);
     assert.equal({ ...visual, aspect: "landscape" }.aspect, "landscape");
   }
-});
-
-test("future AI image providers are explicit, disabled, and provider independent", () => {
-  assert.deepEqual(PLANNED_IMAGE_PROVIDERS.map((provider) => provider.id), ["openai-images", "xai-grok-imagine"]);
-  assert.ok(PLANNED_IMAGE_PROVIDERS.every((provider) => provider.configured === false));
 });

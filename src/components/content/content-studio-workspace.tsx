@@ -1,12 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState, type FormEvent } from "react";
 
-import type { AiPublicStatus } from "@/features/ai-content/types";
+import type { AiDraftIntent, AiPublicStatus } from "@/features/ai-content/types";
 import { aiStatusLabel, aiStatusMessage } from "@/features/ai-content/status-copy";
 import { CONTENT_FORMATS, getContentFormat, type ContentFormatId } from "@/features/content-studio/content-formats";
-import { PLANNED_IMAGE_PROVIDERS } from "@/features/content-studio/image-provider";
 import type { ContentDraft, ContentWorkspaceState, EvidenceOption } from "@/features/content-studio/content-types";
+import type { ContentMediaAsset, ContentMediaPath } from "@/features/content-studio/content-types";
 import {
   countXCharacters,
   createDefaultVisual,
@@ -17,6 +18,8 @@ import {
 import { useContentWorkspace } from "./content-workspace-store";
 import { VisualCreator } from "./visual-creator";
 import { generateAiDraftAction } from "@/server/ai/actions";
+import { generateAiImageAction } from "@/server/ai/image-actions";
+import type { AiImagePublicStatus } from "@/server/ai/image-config";
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -60,12 +63,16 @@ function XPreview({ draft }: { draft: ContentDraft }) {
 
 export function ContentStudioWorkspace({
   aiStatus,
+  imageStatus,
+  initialMediaAssets,
   evidenceOptions,
   evidenceUnavailable,
   initialDraftId,
   initialState,
 }: {
   aiStatus: AiPublicStatus;
+  imageStatus: AiImagePublicStatus;
+  initialMediaAssets: readonly ContentMediaAsset[];
   evidenceOptions: readonly EvidenceOption[];
   evidenceUnavailable: boolean;
   initialDraftId?: string;
@@ -77,7 +84,14 @@ export function ContentStudioWorkspace({
   const [feedback, setFeedback] = useState<string>("");
   const [reviewProblems, setReviewProblems] = useState<readonly string[]>([]);
   const [aiAngle, setAiAngle] = useState("");
+  const [aiIntent, setAiIntent] = useState<AiDraftIntent>("new_subject");
+  const [aiSubject, setAiSubject] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [newDraftFormat, setNewDraftFormat] = useState<ContentFormatId>("beginner-friendly-education");
+  const [mediaAssets, setMediaAssets] = useState(initialMediaAssets);
+  const [imageAspect, setImageAspect] = useState<"square" | "landscape">("landscape");
+  const [imageBusy, setImageBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
 
   const storedDraft = workspace.state?.drafts.find((draft) => draft.id === selectedId)
     ?? workspace.state?.drafts.find((draft) => draft.id === initialDraftId)
@@ -93,6 +107,10 @@ export function ContentStudioWorkspace({
 
   function selectDraft(id: string) {
     setSelectedId(id);
+    const selected = workspace.state.drafts.find((draft) => draft.id === id);
+    setAiIntent(selected?.ideaId ? "develop_current" : "new_subject");
+    setAiSubject(selected?.ideaId ? "" : selected?.title ?? "");
+    setAiAngle("");
     setFeedback("");
     setReviewProblems([]);
   }
@@ -118,8 +136,11 @@ export function ContentStudioWorkspace({
   }
 
   async function newDraft() {
-    const id = await workspace.createDraft("beginner-friendly-education");
-    if (id) { setSelectedId(id); setFeedback("New draft saved to the private workspace."); }
+    const id = await workspace.createDraft(newDraftFormat);
+    if (id) {
+      setSelectedId(id); setAiIntent("new_subject"); setAiSubject(""); setAiAngle("");
+      setFeedback(`New ${getContentFormat(newDraftFormat).label} draft saved to the private workspace.`);
+    }
   }
 
   async function save(event?: FormEvent<HTMLFormElement>) {
@@ -171,14 +192,31 @@ export function ContentStudioWorkspace({
 
   async function generateWithAi() {
     if (!editing || !aiStatus.available) return;
+    if (aiIntent === "new_subject" && !aiSubject.trim()) {
+      setFeedback("Name the new technical subject before generating. AI will not guess a topic for a blank draft.");
+      return;
+    }
     setAiBusy(true);
-    setFeedback("Generating a validated draft with the server-only AI provider…");
+    setFeedback("Saving the selected format before starting the AI request…");
     try {
+      const saved = await workspace.saveDraft(editing);
+      if (!saved.ok || !saved.state) {
+        setFeedback(saved.error ?? "The selected format could not be saved before generation.");
+        return;
+      }
+      const persistedDraft = saved.state.drafts.find((draft) => draft.id === editing.id);
+      if (!persistedDraft) {
+        setFeedback("The saved draft could not be reloaded for generation.");
+        return;
+      }
+      setFeedback("Generating a validated draft with the server-only AI provider…");
       const result = await generateAiDraftAction({
         angle: aiAngle.trim(),
-        draftId: editing.id,
-        expectedVersion: editing.recordVersion,
+        draftId: persistedDraft.id,
+        expectedVersion: persistedDraft.recordVersion,
         idempotencyKey: `ai-draft:${crypto.randomUUID()}`,
+        intent: aiIntent,
+        subject: aiIntent === "new_subject" ? aiSubject.trim() : "",
       });
       if (!result.ok || !result.state) {
         setFeedback(result.error ?? "AI drafting failed without changing the saved draft.");
@@ -191,12 +229,50 @@ export function ContentStudioWorkspace({
         return next;
       });
       setReviewProblems([]);
+      setAiSubject("");
       setFeedback("AI-assisted draft saved with a revision checkpoint. Review every technical claim before approval.");
     } catch {
       setFeedback("The authenticated AI drafting request failed without changing the saved draft.");
     } finally {
       setAiBusy(false);
     }
+  }
+
+  async function generateImage() {
+    if (!editing || !imageStatus.available || editing.mediaPath === "text_only") return;
+    setImageBusy(true);
+    setFeedback(`Preparing one ${editing.mediaPath === "image_first" ? "image-first content package" : "supporting image"}. The server may reserve up to $${imageStatus.maxEstimatedCostUsd.toFixed(2)} from the shared allowance.`);
+    try {
+      const saved = await workspace.saveDraft(editing);
+      const persisted = "state" in saved ? saved.state?.drafts.find((draft: ContentDraft) => draft.id === editing.id) : undefined;
+      if (!saved.ok || !persisted) { setFeedback(("error" in saved ? saved.error : undefined) ?? "Save the image brief before generation."); return; }
+      const result = await generateAiImageAction({ aspect: imageAspect, draftId: persisted.id, expectedVersion: persisted.recordVersion, idempotencyKey: `ai-image:${crypto.randomUUID()}` });
+      if (!result.ok || !result.asset) { setFeedback(result.error ?? "Image generation did not complete."); return; }
+      if (result.state) workspace.replaceState(result.state);
+      setMediaAssets((current) => [result.asset!, ...current.filter((asset) => asset.id !== result.asset!.id)]);
+      setDraftEdits((current) => { const next = { ...current }; delete next[editing.id]; return next; });
+      setFeedback(result.warning ?? (result.groundedDraftSaved ? "The image was generated, inspected, stored privately, and used to create a grounded draft. Review the image and every claim." : "The supporting image was generated, inspected, and stored privately. Review it before use."));
+    } catch {
+      setFeedback("The authenticated image request failed without recording a successful generation.");
+    } finally { setImageBusy(false); }
+  }
+
+  async function uploadImage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    data.set("draftId", editing.id);
+    setUploadBusy(true);
+    try {
+      const response = await fetch("/api/content/media/upload", { body: data, method: "POST" });
+      const body = await response.json() as { asset?: ContentMediaAsset; error?: string };
+      if (!response.ok || !body.asset) { setFeedback(body.error ?? "The image upload failed."); return; }
+      setMediaAssets((current) => [body.asset!, ...current]);
+      form.reset();
+      setFeedback("The owner-provided PNG was stored privately and attached to this draft. Its description still requires editorial review.");
+    } catch { setFeedback("The authenticated image upload failed."); }
+    finally { setUploadBusy(false); }
   }
 
   return (
@@ -210,6 +286,11 @@ export function ContentStudioWorkspace({
             {workspace.state.drafts.map((draft) => <option key={draft.id} value={draft.id}>{draft.title || "Untitled draft"} · {formatName(draft.status)}</option>)}
           </select>
         </label>
+        <label>New draft format
+          <select value={newDraftFormat} onChange={(event) => setNewDraftFormat(event.target.value as ContentFormatId)}>
+            {CONTENT_FORMATS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          </select>
+        </label>
         <button type="button" className="secondary-action" disabled={workspace.busy} onClick={newDraft}>New blank draft</button>
       </section>
 
@@ -217,16 +298,30 @@ export function ContentStudioWorkspace({
         <>
           <section className="studio-panel ai-workspace-panel" aria-labelledby="ai-draft-heading">
             <div className="studio-panel-heading">
-              <div><p className="eyebrow">AI drafting assistant</p><h2 id="ai-draft-heading">Develop this approved idea</h2></div>
+              <div><p className="eyebrow">AI drafting assistant</p><h2 id="ai-draft-heading">Build a deliberate content package</h2></div>
               <span className={aiStatus.available ? "status-chip status-safe" : "status-chip"}>{aiStatusLabel(aiStatus)}</span>
             </div>
             {aiStatus.available ? (
               <div className="draft-fields">
+                <label>Generation goal
+                  <select value={aiIntent} onChange={(event) => setAiIntent(event.target.value as AiDraftIntent)}>
+                    <option value="new_subject">Start a completely new subject</option>
+                    <option value="develop_current" disabled={!editing.ideaId && !editing.title.trim()}>Create a different version of the current idea or draft</option>
+                  </select>
+                </label>
+                {aiIntent === "new_subject" ? (
+                  <label className="wide-field">New technical subject
+                    <input maxLength={300} value={aiSubject} onChange={(event) => setAiSubject(event.target.value)} placeholder="Example: Why Linux namespaces matter to containers" />
+                    <span className="field-note">Required. Starting a new subject detaches this draft from any earlier idea and does not reuse its copy.</span>
+                  </label>
+                ) : (
+                  <p className="field-note wide-field">This creates a new treatment of <strong>{editing.ideaId ? workspace.state.ideas.find((idea) => idea.id === editing.ideaId)?.subject ?? editing.title : editing.title}</strong> in the currently selected <strong>{format.label}</strong> format.</p>
+                )}
                 <label className="wide-field">Different angle or writing direction
                   <textarea rows={3} maxLength={600} value={aiAngle} onChange={(event) => setAiAngle(event.target.value)} placeholder="Optional: emphasize first principles, make the troubleshooting scenario harder, or use a more concise hook." />
                 </label>
                 <div className="studio-actions wide-field">
-                  <button className="primary-action" disabled={aiBusy || workspace.busy} type="button" onClick={generateWithAi}>{aiBusy ? "Generating securely…" : "Generate and save draft"}</button>
+                  <button className="primary-action" disabled={aiBusy || workspace.busy || (aiIntent === "new_subject" && !aiSubject.trim())} type="button" onClick={generateWithAi}>{aiBusy ? "Generating securely…" : aiIntent === "new_subject" ? "Generate new subject" : "Generate different version"}</button>
                   <span className="field-note">The output is validated, saved as a new revision, and always requires human technical review.</span>
                 </div>
               </div>
@@ -251,6 +346,13 @@ export function ContentStudioWorkspace({
                   {CONTENT_FORMATS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                 </select>
               </label>
+              <label>Editorial media path
+                <select value={editing.mediaPath} onChange={(event) => update("mediaPath", event.target.value as ContentMediaPath)}>
+                  <option value="text_only">Text only</option>
+                  <option value="text_first">Text first, image when useful</option>
+                  <option value="image_first">Image first, then grounded copy</option>
+                </select>
+              </label>
               <label className="wide-field">Title or hook
                 <input maxLength={300} value={editing.title} onChange={(event) => update("title", event.target.value)} />
               </label>
@@ -261,6 +363,14 @@ export function ContentStudioWorkspace({
               <label className="wide-field">Technical explanation and research notes
                 <textarea rows={7} maxLength={12_000} value={editing.explanation} onChange={(event) => update("explanation", event.target.value)} placeholder="Keep factual claims, mechanisms, limitations, and hypothetical examples distinguishable." />
               </label>
+              {editing.mediaPath !== "text_only" ? <>
+                <label className="wide-field">Reviewed image brief
+                  <textarea rows={5} maxLength={4000} value={editing.imagePrompt} onChange={(event) => update("imagePrompt", event.target.value)} placeholder="Describe the subject, composition, labels, and what the visual must teach. Do not request fabricated documentary evidence." />
+                </label>
+                <label className="wide-field">Planned alt text
+                  <textarea rows={3} maxLength={1000} value={editing.imageAltText} onChange={(event) => update("imageAltText", event.target.value)} />
+                </label>
+              </> : null}
               <label className="wide-field">Factual source references
                 <select
                   multiple
@@ -328,9 +438,28 @@ export function ContentStudioWorkspace({
           )}
 
           <section className="studio-panel" aria-labelledby="ai-provider-heading">
-            <div className="studio-panel-heading"><div><p className="eyebrow">Future integration</p><h2 id="ai-provider-heading">AI image providers</h2></div><span className="status-chip">Disabled</span></div>
-            <p className="studio-intro">No API key is required and no billable image request can be made in this release. Provider adapters will require an operator budget, explicit generation approval, and durable asset storage.</p>
-            <ul className="provider-list">{PLANNED_IMAGE_PROVIDERS.map((provider) => <li key={provider.id}><strong>{provider.label}</strong><span>{provider.note}</span><span className="status-chip">Not configured</span></li>)}</ul>
+            <div className="studio-panel-heading"><div><p className="eyebrow">Visual production</p><h2 id="ai-provider-heading">AI image package</h2></div><span className={imageStatus.available ? "status-chip status-safe" : "status-chip"}>{imageStatus.available ? "Owner initiated" : "Unavailable"}</span></div>
+            <p className="studio-intro">Choose Text only, Text first, or Image first above. Every paid image request is explicit, owner-only, idempotent, and shares the monthly AI allowance. Automated tests use mocks and never spend API credits.</p>
+            {imageStatus.available ? <div className="draft-fields">
+              <label>Image shape<select value={imageAspect} onChange={(event) => setImageAspect(event.target.value as "square" | "landscape")}><option value="square">Square, 1024 × 1024</option><option value="landscape">Landscape, 1536 × 1024</option></select></label>
+              <div className="studio-actions wide-field"><button type="button" className="primary-action" onClick={generateImage} disabled={imageBusy || workspace.busy || editing.mediaPath === "text_only" || !editing.imagePrompt.trim()}>{imageBusy ? "Generating and inspecting…" : `Generate one image, reserve up to $${imageStatus.maxEstimatedCostUsd.toFixed(2)}`}</button><span className="field-note">The image and inspection may reserve up to the displayed amount. Image-first grounded copy also uses one bounded text request from the same monthly allowance. This is an application estimate, not a provider-side billing ceiling. No request runs until this button is pressed.</span></div>
+            </div> : <div className="studio-state"><strong>AI image generation is not configured</strong><p>{imageStatus.reason === "missing_storage" ? "Private durable storage is required before images can be generated." : imageStatus.reason === "shared_ai_unavailable" ? "The shared AI allowance or provider configuration is unavailable." : "The server-side image-generation switch is off."}</p></div>}
+
+            <form className="media-upload-form" onSubmit={uploadImage}>
+              <h3>Attach an owner-provided image</h3>
+              <p className="field-note">PNG only, up to 4 MB. Use images you created or are authorized to use.</p>
+              <label>PNG file<input name="file" type="file" accept="image/png" required /></label>
+              <label>What the image actually shows<textarea name="imageDescription" rows={3} maxLength={2000} required /></label>
+              <label>Accessible alt text<textarea name="altText" rows={3} maxLength={1000} required /></label>
+              <button type="submit" className="secondary-action" disabled={uploadBusy}>{uploadBusy ? "Uploading privately…" : "Attach private image"}</button>
+            </form>
+
+            <div className="media-asset-grid">
+              {mediaAssets.filter((asset) => asset.draftId === editing.id).map((asset) => <article className="media-asset-card" key={asset.id}>
+                <Image unoptimized src={`/api/content/media/${asset.id}`} alt={asset.altText} width={asset.width} height={asset.height} />
+                <div><strong>{asset.origin === "ai_generated" ? "AI-generated editorial image" : "Owner-provided image"}</strong><p>{asset.imageDescription}</p><small>{asset.width} × {asset.height} · {formatDate(asset.createdAt)}</small><a className="secondary-action" href={`/api/content/media/${asset.id}?download=1`}>Download PNG</a></div>
+              </article>)}
+            </div>
           </section>
         </>
       ) : <div className="studio-state">Create a draft to begin writing.</div>}

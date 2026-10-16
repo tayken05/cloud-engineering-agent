@@ -14,7 +14,10 @@ import {
 } from "@/server/db/schema";
 import { withDatabaseTransaction } from "@/server/db/transaction";
 
-const RUN_LEASE_MS = 120_000;
+// An image-first package can use one bounded image request, one visual inspection,
+// and one grounded text request. Keep the database lease longer than that total
+// while still allowing an interrupted serverless invocation to recover.
+const RUN_LEASE_MS = 360_000;
 
 export type AiSuggestionView = Readonly<{
   createdAt: string;
@@ -179,8 +182,12 @@ export async function setAiSuggestionDecision(input: Readonly<{
 export async function listExistingContentSubjects(ownerId: string): Promise<readonly string[]> {
   return withDatabaseTransaction(async (db) => {
     const ideas = await db.select({ value: contentIdeas.subject }).from(contentIdeas).where(eq(contentIdeas.ownerId, ownerId)).limit(100);
-    const drafts = await db.select({ value: contentDrafts.title }).from(contentDrafts).where(eq(contentDrafts.ownerId, ownerId)).limit(100);
-    return [...ideas, ...drafts].map((item) => item.value).filter(Boolean);
+    const drafts = await db.select({ caption: contentDrafts.caption, threadPosts: contentDrafts.threadPosts, title: contentDrafts.title })
+      .from(contentDrafts).where(eq(contentDrafts.ownerId, ownerId)).limit(100);
+    return [
+      ...ideas.map((item) => item.value),
+      ...drafts.map((item) => `${item.title} ${item.caption} ${item.threadPosts.join(" ")}`.trim()),
+    ].filter(Boolean);
   });
 }
 

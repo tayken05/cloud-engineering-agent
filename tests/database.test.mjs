@@ -15,6 +15,7 @@ import {
   contentDraftRevisions,
   contentDrafts,
   contentIdeas,
+  contentMediaAssets,
   contentVisualSpecifications,
   aiContentSuggestions,
   aiGenerationEvidence,
@@ -121,13 +122,14 @@ test("migration history contains only reviewed additive schema entries", async (
     "0003_job_discovery",
     "0004_content_workspace",
     "0005_ai_content_generation",
+    "0006_ai_visual_content",
   ]);
   for (const entry of journal.entries) {
     const migration = await readFile(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8");
     const statements = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
     assert.ok(statements.length > 0);
     for (const statement of statements) {
-      assert.match(statement, /^(CREATE TYPE|CREATE TABLE|CREATE INDEX|CREATE UNIQUE INDEX|ALTER TABLE .* ADD (COLUMN|CONSTRAINT))/);
+      assert.match(statement, /^(CREATE TYPE|CREATE TABLE|CREATE INDEX|CREATE UNIQUE INDEX|ALTER TYPE .* ADD VALUE|ALTER TABLE .* ADD (COLUMN|CONSTRAINT))/);
       assert.doesNotMatch(statement, /^(DROP|TRUNCATE|DELETE|INSERT|UPDATE)\b/);
       assert.doesNotMatch(statement, /neon_auth/i);
     }
@@ -195,8 +197,17 @@ test("the content workspace migration matches fresh offline generation", async (
 
 test("the AI-content migration matches fresh offline generation", async () => {
   const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0004_snapshot.json", import.meta.url), "utf8"));
-  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const aiSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0005_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, aiSnapshot);
   const migration = await readFile(new URL("../drizzle/0005_ai_content_generation.sql", import.meta.url), "utf8");
+  const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
+  assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the AI-visual migration matches fresh offline generation", async () => {
+  const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0005_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const migration = await readFile(new URL("../drizzle/0006_ai_visual_content.sql", import.meta.url), "utf8");
   const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   assert.deepEqual(existing, generated.map((statement) => statement.trim()));
 });
@@ -214,8 +225,8 @@ test("the AI-content snapshot matches owner-scoped run, suggestion, and evidence
 });
 
 test("the content snapshot matches owner-scoped declarations", async () => {
-  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0004_snapshot.json", import.meta.url), "utf8"));
-  for (const table of [contentIdeas, contentDrafts, contentDraftRevisions, contentVisualSpecifications]) {
+  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0006_snapshot.json", import.meta.url), "utf8"));
+  for (const table of [contentIdeas, contentDrafts, contentDraftRevisions, contentVisualSpecifications, contentMediaAssets]) {
     const declared = getTableConfig(table);
     const stored = snapshot.tables[`public.${declared.name}`];
     assert.ok(stored);

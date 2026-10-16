@@ -87,10 +87,12 @@ export const contentVisualTemplate = pgEnum("content_visual_template", [
 ]);
 export const contentVisualAspect = pgEnum("content_visual_aspect", ["square", "landscape"]);
 export const contentVisualAccent = pgEnum("content_visual_accent", ["blue", "cyan", "violet", "amber"]);
-export const aiGenerationKind = pgEnum("ai_generation_kind", ["idea_batch", "draft"]);
+export const aiGenerationKind = pgEnum("ai_generation_kind", ["idea_batch", "draft", "image"]);
 export const aiGenerationStatus = pgEnum("ai_generation_status", ["running", "succeeded", "failed"]);
 export const aiSuggestionStatus = pgEnum("ai_suggestion_status", ["proposed", "accepted", "rejected"]);
 export const aiVerificationStatus = pgEnum("ai_verification_status", ["evidence_backed", "needs_review"]);
+export const contentMediaPath = pgEnum("content_media_path", ["text_only", "text_first", "image_first"]);
+export const contentMediaOrigin = pgEnum("content_media_origin", ["ai_generated", "owner_upload"]);
 
 const auditColumns = () => ({
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -471,6 +473,9 @@ export const contentDrafts = pgTable("content_drafts", {
   moderatorNotes: varchar("moderator_notes", { length: 6000 }).default("").notNull(),
   threadPosts: text("thread_posts").array().default(sql`'{}'::text[]`).notNull(),
   pollOptions: text("poll_options").array().default(sql`'{}'::text[]`).notNull(),
+  mediaPath: contentMediaPath("media_path").default("text_only").notNull(),
+  imagePrompt: varchar("image_prompt", { length: 4000 }),
+  imageAltText: varchar("image_alt_text", { length: 1000 }),
   status: contentDraftStatus("status").default("draft").notNull(),
   recordVersion: integer("record_version").default(1).notNull(),
   ...auditColumns(),
@@ -612,6 +617,41 @@ export const aiGenerationEvidence = pgTable("ai_generation_evidence", {
   index("ai_generation_evidence_owner_run_idx").on(table.ownerId, table.runId),
 ]);
 
+export const contentMediaAssets = pgTable("content_media_assets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  draftId: varchar("draft_id", { length: 128 }).notNull(),
+  generationRunId: uuid("generation_run_id"),
+  origin: contentMediaOrigin("origin").notNull(),
+  storagePathname: varchar("storage_pathname", { length: 1024 }).notNull(),
+  contentType: varchar("content_type", { length: 64 }).notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  provider: varchar("provider", { length: 64 }),
+  model: varchar("model", { length: 128 }),
+  providerRequestId: varchar("provider_request_id", { length: 128 }),
+  generationPrompt: varchar("generation_prompt", { length: 4000 }),
+  imageDescription: varchar("image_description", { length: 2000 }).notNull(),
+  altText: varchar("alt_text", { length: 1000 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  foreignKey({ name: "content_media_assets_draft_owner_fk", columns: [table.draftId, table.ownerId], foreignColumns: [contentDrafts.id, contentDrafts.ownerId] }).onDelete("cascade"),
+  foreignKey({ name: "content_media_assets_run_owner_fk", columns: [table.generationRunId, table.ownerId], foreignColumns: [aiGenerationRuns.id, aiGenerationRuns.ownerId] }).onDelete("restrict"),
+  unique("content_media_assets_storage_path_unique").on(table.storagePathname),
+  unique("content_media_assets_run_unique").on(table.generationRunId),
+  index("content_media_assets_owner_draft_created_idx").on(table.ownerId, table.draftId, table.createdAt),
+  check("content_media_assets_owner_not_blank", sql`length(btrim(${table.ownerId})) > 0`),
+  check("content_media_assets_dimensions_positive", sql`${table.width} > 0 AND ${table.height} > 0`),
+  check("content_media_assets_size_bounded", sql`${table.byteSize} > 0 AND ${table.byteSize} <= 15728640`),
+  check("content_media_assets_type", sql`${table.contentType} IN ('image/png', 'image/jpeg', 'image/webp')`),
+  check("content_media_assets_description_not_blank", sql`length(btrim(${table.imageDescription})) > 0 AND length(btrim(${table.altText})) > 0`),
+  check("content_media_assets_origin_fields", sql`
+    (${table.origin} = 'ai_generated' AND ${table.generationRunId} IS NOT NULL AND ${table.provider} IS NOT NULL AND ${table.model} IS NOT NULL AND ${table.generationPrompt} IS NOT NULL) OR
+    (${table.origin} = 'owner_upload' AND ${table.generationRunId} IS NULL)
+  `),
+]);
+
 export const sourcesRelations = relations(sources, ({ many }) => ({ items: many(sourceItems) }));
 export const sourceItemsRelations = relations(sourceItems, ({ one, many }) => ({
   source: one(sources, { fields: [sourceItems.sourceId], references: [sources.id] }),
@@ -637,10 +677,10 @@ export const contentIdeaSourceItemsRelations = relations(contentIdeaSourceItems,
 }));
 export const contentDraftsRelations = relations(contentDrafts, ({ one, many }) => ({
   idea: one(contentIdeas, { fields: [contentDrafts.ideaId], references: [contentIdeas.id] }),
-  evidence: many(contentDraftSourceItems), revisions: many(contentDraftRevisions), visual: one(contentVisualSpecifications),
+  evidence: many(contentDraftSourceItems), media: many(contentMediaAssets), revisions: many(contentDraftRevisions), visual: one(contentVisualSpecifications),
 }));
 export const aiGenerationRunsRelations = relations(aiGenerationRuns, ({ many }) => ({
-  evidence: many(aiGenerationEvidence), suggestions: many(aiContentSuggestions),
+  evidence: many(aiGenerationEvidence), media: many(contentMediaAssets), suggestions: many(aiContentSuggestions),
 }));
 export const aiContentSuggestionsRelations = relations(aiContentSuggestions, ({ one }) => ({
   run: one(aiGenerationRuns, { fields: [aiContentSuggestions.runId], references: [aiGenerationRuns.id] }),
@@ -676,3 +716,4 @@ export type ContentDraftRow = typeof contentDrafts.$inferSelect;
 export type NewContentDraftRow = typeof contentDrafts.$inferInsert;
 export type AiGenerationRunRow = typeof aiGenerationRuns.$inferSelect;
 export type AiContentSuggestionRow = typeof aiContentSuggestions.$inferSelect;
+export type ContentMediaAssetRow = typeof contentMediaAssets.$inferSelect;

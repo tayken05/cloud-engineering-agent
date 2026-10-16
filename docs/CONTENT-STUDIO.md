@@ -1,6 +1,6 @@
 # Educational Content Studio
 
-Status: Tasks 11–13 implement an owner-authenticated, PostgreSQL-backed Content Ideas workspace, drafting studio, X presentation preview, deterministic PNG visual creator, and a disabled-by-default AI idea/draft engine. No X account, publishing endpoint, paid image generator, or durable asset store is connected.
+Status: Tasks 11–13 implement an owner-authenticated, PostgreSQL-backed Content Ideas workspace, drafting studio, X presentation preview, deterministic PNG visual creator, AI idea/draft generation, and owner-initiated AI image packages backed by private durable storage. No X account, publishing endpoint, or automatic paid generation is connected.
 
 ## Security boundary
 
@@ -70,17 +70,17 @@ The Studio can generate or revise one saved draft with its selected format and o
 
 OpenAI integration is server-only and uses strict Responses API structured output. It is unavailable unless an exact owner session, enable flag, server key, and positive monthly allowance all exist. The default production state is disabled with a zero allowance; Task 13 used mocked provider output and made no paid request. See `docs/AI-CONTENT.md`.
 
-## Future AI image-provider boundary
+## Owner-initiated AI image workflow
 
-`ImageGenerationProvider` defines a provider-neutral request/result contract for generation and editing. A future implementation must keep credentials server-side, use cancellation and timeouts, record provider request and cost metadata, require human approval, and copy approved output into durable object storage before provider URLs expire. PostgreSQL should store metadata and storage identifiers rather than image bytes.
+`AiImageProvider` keeps provider calls separate from editorial orchestration and storage. The OpenAI adapter uses the direct Images API to create one PNG, then the Responses API inspects the returned bytes. Image-first copy receives that inspected description rather than an imagined scene. No provider URL or Vercel temporary filesystem is used.
 
-The current provider registry exposes OpenAI Images and xAI Grok Imagine as disabled plans. There are no API clients, credentials, generation buttons, or billable calls.
+The owner chooses text-only, text-first, or image-first for each draft and can override an AI recommendation. A paid request occurs only after the authenticated owner presses a button that shows the maximum application reservation. Uploaded owner PNGs require a reviewed description and alt text. All assets are attached to the correct owner-scoped draft and kept in private Vercel Blob storage; PostgreSQL retains metadata, generation provenance, dimensions, and the generation-run relationship without storing image bytes.
 
-Official OpenAI documentation currently distinguishes the direct Images API for single generation/edit operations from the Responses API for conversational, multi-turn image work. GPT Image supports output size, quality, format, compression, and editing; charges depend on model and image/text token use. Organization verification may be required. Review the [OpenAI image-generation guide](https://developers.openai.com/api/docs/guides/image-generation) and [current pricing](https://developers.openai.com/api/docs/pricing) immediately before implementation.
+Official OpenAI documentation distinguishes the direct Images API for single generation/edit operations from the Responses API image tool. This implementation uses the direct API with `gpt-image-2.5-flare`, low quality by default, PNG output, and supported square or landscape dimensions. Charges depend on image and text token use. Review the [OpenAI image-generation guide](https://developers.openai.com/api/docs/guides/image-generation) and [current pricing](https://developers.openai.com/api/docs/pricing) before changing the model, quality, or cost reservation.
 
 Official xAI documentation currently describes `grok-imagine-image-2.0` generation and editing, multiple aspect ratios, 1K/2K output, quality selection, batches, base64 output, and temporary hosted URLs. Current pricing varies by input, resolution, and quality. Review the [xAI image-generation guide](https://docs.x.ai/developers/model-capabilities/images/generation), [model page](https://docs.x.ai/developers/models/grok-imagine-image-2.0), and [pricing](https://docs.x.ai/developers/pricing) immediately before implementation.
 
-Provider capabilities and prices are external and can change. A later implementation must pin supported models intentionally, establish budget controls, validate output types and dimensions, remove provider secrets from browser code, and choose durable storage before activation.
+Provider capabilities and prices are external and can change. The server validates output type, size, dimensions, inspection text, and owner relationships. Automated tests use mocks; this task made no real image request. xAI remains an unimplemented future adapter.
 
 ## Future publishing foundation
 

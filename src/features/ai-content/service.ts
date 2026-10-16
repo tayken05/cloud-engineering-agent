@@ -96,16 +96,20 @@ export async function generateDraft(input: Readonly<{
   evidence: readonly AiResearchEvidence[];
   idempotencyKey: string;
   idea: ContentIdea | null;
+  intent: "develop_current" | "new_subject";
   ownerId: string;
   provider: AiTextProvider;
   store: AiRunStore;
+  subject: string;
+  existingContent: readonly string[];
+  imageDescription?: string;
 }>): Promise<Readonly<{ duplicate: boolean; output: AiDraftOutput | null; runId: string }>> {
   ensureEnabled(input.config);
   const evidence = input.evidence.slice(0, 12);
   const allowedEvidence = new Set(evidence.map((item) => item.id));
   const instructions = draftInstructions(input.draft.formatId);
-  const providerInput = draftInput(input.draft, input.idea, input.angle, evidence);
-  const fingerprint = requestFingerprint({ angle: input.angle, draftId: input.draft.id, evidenceIds: [...allowedEvidence].sort(), version: input.draft.recordVersion });
+  const providerInput = draftInput(input.draft, input.idea, input.angle, evidence, input.intent, input.subject, input.existingContent, input.imageDescription);
+  const fingerprint = requestFingerprint({ angle: input.angle, draftId: input.draft.id, evidenceIds: [...allowedEvidence].sort(), formatId: input.draft.formatId, intent: input.intent, subject: input.subject, version: input.draft.recordVersion });
   const reservationMicrousd = estimateCostMicrousd(input.config, estimatedInputTokens(`${instructions}\n${providerInput}`), DRAFT_MAX_OUTPUT_TOKENS);
   const reservation = await input.store.begin({ evidenceIds: [...allowedEvidence], fingerprint, idempotencyKey: input.idempotencyKey, kind: "draft", model: input.provider.model, monthlyBudgetMicrousd: input.config.monthlyBudgetMicrousd, ownerId: input.ownerId, provider: input.provider.id, requestedCount: 1, reservationMicrousd });
   if (reservation.duplicate) return { duplicate: true, output: null, runId: reservation.runId };
@@ -113,6 +117,9 @@ export async function generateDraft(input: Readonly<{
     const signal = AbortSignal.timeout(input.config.requestTimeoutMs);
     const result = await input.provider.generateStructured({ input: providerInput, instructions, maxOutputTokens: DRAFT_MAX_OUTPUT_TOKENS, schema: draftOutputSchema(), schemaName: "cloud_content_draft", signal });
     const output = validateDraftOutput(result.data, input.draft.formatId, allowedEvidence);
+    if (isNearDuplicate(`${output.title} ${output.caption} ${output.threadPosts.join(" ")}`, input.existingContent)) {
+      throw new AiGenerationError("invalid_output", "The generated draft was too similar to existing content.");
+    }
     await input.store.complete({
       estimatedCostMicrousd: estimateCostMicrousd(input.config, result.inputTokens, result.outputTokens),
       inputTokens: result.inputTokens,

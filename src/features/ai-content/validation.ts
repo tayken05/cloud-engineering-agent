@@ -5,6 +5,7 @@ import {
   AUDIENCE_LEVELS,
   ENGAGEMENT_STYLES,
   TECHNICAL_CATEGORIES,
+  CONTENT_MEDIA_PATHS,
   VISUAL_ASPECTS,
   VISUAL_TEMPLATES,
   type VisualSpecification,
@@ -12,6 +13,7 @@ import {
 import { countXCharacters, X_POLL_OPTION_LIMIT, X_POST_CHARACTER_LIMIT } from "../content-studio/content-workspace.ts";
 import {
   AI_PRESENTATIONS,
+  AI_DRAFT_INTENTS,
   AI_RESEARCH_PATHS,
   AI_VERIFICATION_STATUSES,
   AiGenerationError,
@@ -27,6 +29,7 @@ const IDEMPOTENCY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:_-]{15,127}$/;
 const DRAFT_ID_PATTERN = /^(draft|starter-draft)-[a-z0-9-]+$/;
 const SAFE_SERIES_KEY = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DANGEROUS_COMMAND = /(?:rm\s+-rf\s+\/|curl\b[^\n|]{0,200}\|\s*(?:ba)?sh\b|wget\b[^\n|]{0,200}\|\s*(?:ba)?sh\b|chmod\s+777\b|mkfs\.|:\(\)\s*\{)/i;
+export const FORBIDDEN_TYPOGRAPHIC_DASH = /[\u2013\u2014]/u;
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -94,10 +97,19 @@ export function validateDraftRequest(value: unknown): AiDraftRequest {
   const angle = boundedText(item.angle, 500, false);
   const idempotencyKey = boundedText(item.idempotencyKey, 128);
   const expectedVersion = typeof item.expectedVersion === "number" ? Math.floor(item.expectedVersion) : 0;
-  if (!draftId || !DRAFT_ID_PATTERN.test(draftId) || angle === null || !idempotencyKey || !IDEMPOTENCY_PATTERN.test(idempotencyKey) || expectedVersion < 1) {
+  const intent = member(item.intent, AI_DRAFT_INTENTS);
+  const subject = boundedText(item.subject, 300, false);
+  if (!draftId || !DRAFT_ID_PATTERN.test(draftId) || angle === null || !idempotencyKey || !IDEMPOTENCY_PATTERN.test(idempotencyKey) || expectedVersion < 1 || !intent || subject === null || (intent === "new_subject" && !subject)) {
     throw new AiGenerationError("invalid_request", "The draft request is invalid.");
   }
-  return { angle, draftId, expectedVersion, idempotencyKey };
+  return { angle, draftId, expectedVersion, idempotencyKey, intent, subject };
+}
+
+function containsForbiddenDash(value: unknown): boolean {
+  if (typeof value === "string") return FORBIDDEN_TYPOGRAPHIC_DASH.test(value);
+  if (Array.isArray(value)) return value.some(containsForbiddenDash);
+  if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).some(containsForbiddenDash);
+  return false;
 }
 
 export function validateIdeaSuggestions(value: unknown, allowedEvidence: ReadonlySet<string>, expectedCount: number): AiIdeaSuggestion[] {
@@ -122,7 +134,7 @@ export function validateIdeaSuggestions(value: unknown, allowedEvidence: Readonl
     const suggestedVisual = visual(item.suggestedVisual);
     const seriesKey = item.seriesKey === null ? null : boundedText(item.seriesKey, 100);
     const seriesPosition = item.seriesPosition === null ? null : typeof item.seriesPosition === "number" ? Math.floor(item.seriesPosition) : NaN;
-    if (!title || !technicalSubject || !formatId || !audience || !technicalCategory || !educationalObjective || !whyUseful || !contentAngle || !engagementStyle || !recommendedPresentation || !verificationStatus || !ids || !reviewFlags || suggestedVisual === undefined || (seriesKey !== null && (!seriesKey || !SAFE_SERIES_KEY.test(seriesKey))) || (seriesPosition !== null && (!Number.isInteger(seriesPosition) || seriesPosition < 1 || seriesPosition > 999))) return null;
+    if (!title || !technicalSubject || !formatId || !audience || !technicalCategory || !educationalObjective || !whyUseful || !contentAngle || !engagementStyle || !recommendedPresentation || !verificationStatus || !ids || !reviewFlags || suggestedVisual === undefined || containsForbiddenDash(item) || (seriesKey !== null && (!seriesKey || !SAFE_SERIES_KEY.test(seriesKey))) || (seriesPosition !== null && (!Number.isInteger(seriesPosition) || seriesPosition < 1 || seriesPosition > 999))) return null;
     const flags = [...reviewFlags];
     let safeStatus = verificationStatus;
     if (ids.length === 0 || (formatId === "historical-first-principles" && ids.length < 1)) {
@@ -170,7 +182,12 @@ export function validateDraftOutput(value: unknown, formatId: ContentFormatId, a
   const reviewFlags = stringArray(item.reviewFlags, 20, 300);
   const verificationStatus = member(item.verificationStatus, AI_VERIFICATION_STATUSES);
   const visualSpec = visual(item.visual);
-  if (!title || caption === null || !explanation || moderatorNotes === null || !threadPosts || !pollOptions || !ids || !claims || !reviewFlags || !verificationStatus || visualSpec === undefined) throw new AiGenerationError("invalid_output", "The provider returned malformed draft fields.");
+  const media = record(item.mediaRecommendation);
+  const mediaPath = media ? member(media.path, CONTENT_MEDIA_PATHS) : null;
+  const rationale = media ? boundedText(media.rationale, 1000) : null;
+  const imagePrompt = media ? boundedText(media.imagePrompt, 4000, false) : null;
+  const altText = media ? boundedText(media.altText, 1000, false) : null;
+  if (!title || caption === null || !explanation || moderatorNotes === null || !threadPosts || !pollOptions || !ids || !claims || !reviewFlags || !verificationStatus || visualSpec === undefined || !mediaPath || !rationale || imagePrompt === null || altText === null || (mediaPath !== "text_only" && (!imagePrompt || !altText)) || containsForbiddenDash(item)) throw new AiGenerationError("invalid_output", "The provider returned malformed draft fields.");
   const flags = [...reviewFlags];
   let safeStatus = verificationStatus;
   const format = getContentFormat(formatId);
@@ -182,7 +199,7 @@ export function validateDraftOutput(value: unknown, formatId: ContentFormatId, a
   if (claims.some((claim) => claim.reviewStatus === "needs_review") || ids.length === 0 || flags.length > 0) safeStatus = "needs_review";
   if (formatId === "historical-first-principles" && ids.length === 0) flags.push("Historical chronology lacks supporting evidence.");
   if (formatId === "real-world-analogies" && !/limit|break|does not|isn't|not model/i.test(`${explanation} ${moderatorNotes}`)) flags.push("The analogy does not state where it stops matching the mechanism.");
-  return { caption, evidenceSourceItemIds: ids, explanation, factualClaims: claims, moderatorNotes, pollOptions, reviewFlags: [...new Set(flags)].slice(0, 20), threadPosts, title, verificationStatus: safeStatus, visual: visualSpec };
+  return { caption, evidenceSourceItemIds: ids, explanation, factualClaims: claims, mediaRecommendation: { altText, imagePrompt, path: mediaPath, rationale }, moderatorNotes, pollOptions, reviewFlags: [...new Set(flags)].slice(0, 20), threadPosts, title, verificationStatus: safeStatus, visual: visualSpec };
 }
 
 function normalizedWords(value: string): Set<string> {
@@ -212,5 +229,5 @@ export function ideaOutputSchema() {
 export function draftOutputSchema() {
   const ideaSchema = ideaOutputSchema();
   const visualSchema = ((ideaSchema.properties.ideas.items.properties.suggestedVisual) as Readonly<Record<string, unknown>>);
-  return { type: "object", additionalProperties: false, required: ["title", "caption", "explanation", "moderatorNotes", "threadPosts", "pollOptions", "evidenceSourceItemIds", "verificationStatus", "factualClaims", "reviewFlags", "visual"], properties: { title: { type: "string" }, caption: { type: "string" }, explanation: { type: "string" }, moderatorNotes: { type: "string" }, threadPosts: { type: "array", items: { type: "string" }, maxItems: 20 }, pollOptions: { type: "array", items: { type: "string" }, maxItems: 4 }, evidenceSourceItemIds: { type: "array", items: { type: "string" }, maxItems: 12 }, verificationStatus: { type: "string", enum: [...AI_VERIFICATION_STATUSES] }, factualClaims: { type: "array", maxItems: 30, items: { type: "object", additionalProperties: false, required: ["text", "kind", "evidenceSourceItemIds", "reviewStatus"], properties: { text: { type: "string" }, kind: { type: "string", enum: ["sourced_fact", "interpretation", "hypothetical_example"] }, evidenceSourceItemIds: { type: "array", items: { type: "string" }, maxItems: 12 }, reviewStatus: { type: "string", enum: ["supported", "needs_review"] } } } }, reviewFlags: { type: "array", items: { type: "string" }, maxItems: 20 }, visual: visualSchema } } as const;
+  return { type: "object", additionalProperties: false, required: ["title", "caption", "explanation", "moderatorNotes", "threadPosts", "pollOptions", "evidenceSourceItemIds", "verificationStatus", "factualClaims", "reviewFlags", "visual", "mediaRecommendation"], properties: { title: { type: "string" }, caption: { type: "string" }, explanation: { type: "string" }, moderatorNotes: { type: "string" }, threadPosts: { type: "array", items: { type: "string" }, maxItems: 20 }, pollOptions: { type: "array", items: { type: "string" }, maxItems: 4 }, evidenceSourceItemIds: { type: "array", items: { type: "string" }, maxItems: 12 }, verificationStatus: { type: "string", enum: [...AI_VERIFICATION_STATUSES] }, factualClaims: { type: "array", maxItems: 30, items: { type: "object", additionalProperties: false, required: ["text", "kind", "evidenceSourceItemIds", "reviewStatus"], properties: { text: { type: "string" }, kind: { type: "string", enum: ["sourced_fact", "interpretation", "hypothetical_example"] }, evidenceSourceItemIds: { type: "array", items: { type: "string" }, maxItems: 12 }, reviewStatus: { type: "string", enum: ["supported", "needs_review"] } } } }, reviewFlags: { type: "array", items: { type: "string" }, maxItems: 20 }, visual: visualSchema, mediaRecommendation: { type: "object", additionalProperties: false, required: ["path", "rationale", "imagePrompt", "altText"], properties: { path: { type: "string", enum: [...CONTENT_MEDIA_PATHS] }, rationale: { type: "string" }, imagePrompt: { type: "string" }, altText: { type: "string" } } } } } as const;
 }

@@ -1,46 +1,46 @@
 import type { VisualAspect } from "./content-types.ts";
 
-export type ImageGenerationMode = "generate" | "edit";
-
 export type ImageGenerationRequest = Readonly<{
   aspect: VisualAspect;
-  caption: string;
-  mode: ImageGenerationMode;
   prompt: string;
-  referenceAssetIds: readonly string[];
+  subject: string;
 }>;
 
-export type GeneratedImageAsset = Readonly<{
-  assetId: string;
-  contentType: "image/png" | "image/jpeg" | "image/webp";
+export type GeneratedImage = Readonly<{
+  bytes: Uint8Array;
+  contentType: "image/png";
   height: number;
-  provider: string;
+  inputTokens: number;
+  model: string;
+  outputTokens: number;
   providerRequestId: string | null;
   width: number;
 }>;
 
-/**
- * Future providers must return durable asset metadata after the operator-approved
- * result has been copied to configured object storage. Temporary provider URLs
- * and base64 payloads must never be stored in PostgreSQL as the asset itself.
- */
-export interface ImageGenerationProvider {
-  readonly id: string;
-  readonly supportsEditing: boolean;
-  generate(request: ImageGenerationRequest, options: Readonly<{ signal: AbortSignal }>): Promise<GeneratedImageAsset>;
+export type ImageInspection = Readonly<{
+  altText: string;
+  description: string;
+  fidelityWarnings: readonly string[];
+  inputTokens: number;
+  outputTokens: number;
+  responseId: string | null;
+}>;
+
+export interface AiImageProvider {
+  readonly id: "openai";
+  readonly model: string;
+  generate(request: ImageGenerationRequest, signal: AbortSignal): Promise<GeneratedImage>;
+  inspect(image: GeneratedImage, subject: string, signal: AbortSignal): Promise<ImageInspection>;
 }
 
-export const PLANNED_IMAGE_PROVIDERS = Object.freeze([
-  {
-    configured: false,
-    id: "openai-images",
-    label: "OpenAI Images",
-    note: "Planned for text-to-image and conversational or direct editing after credentials, budgets, approval, and durable storage are configured.",
-  },
-  {
-    configured: false,
-    id: "xai-grok-imagine",
-    label: "xAI Grok Imagine",
-    note: "Planned for generation and editing after credentials, budgets, approval, temporary-output capture, and durable storage are configured.",
-  },
-] as const);
+export const IMAGE_ASSET_MAX_BYTES = 15 * 1024 * 1024;
+
+export function readPngDimensions(bytes: Uint8Array): Readonly<{ height: number; width: number }> {
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (bytes.length < 24 || signature.some((value, index) => bytes[index] !== value)) throw new Error("The image provider returned an invalid PNG.");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  if (width < 512 || height < 512 || width > 3840 || height > 3840) throw new Error("The image provider returned unsupported dimensions.");
+  return { height, width };
+}

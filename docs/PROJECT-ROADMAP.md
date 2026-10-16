@@ -152,9 +152,13 @@ Develop the private hub across all ten subject areas defined in `MASTER-BLUEPRIN
 - Added owner-scoped generation runs, evidence, suggestions, leases, idempotency, usage/cost accounting, and atomic allowance reservation through forward migration `0005_ai_content_generation.sql`. Development and production are migrated; managed Auth and existing data are unchanged.
 - Production generation remains unavailable: enabled defaults false, monthly allowance defaults zero, no paid request was made, and no AI Cron exists. Later activation requires explicit owner budget approval, a server-only key, current model/pricing review, and a redeploy.
 
-## Planned phase: AI image generation and deeper content memory
+## Task 13 follow-up: Editorial quality and visual-first generation — implemented
 
-Evaluate provider-backed image generation only after explicit budget and durable asset-storage approval. Add published-post memory and correction workflows when X publishing exists. Preserve deterministic visuals and evidence-backed human review.
+- Fixed blank-draft generation so the selected format is saved before provider access and every new subject is explicit. Regeneration of the current idea and creation of a new subject are now separate operations.
+- Added content-history duplicate rejection, primary-domain direction, distinct guidance for all 20 formats, and an approval check that rejects em and en dashes in publishable copy.
+- Added text-only, text-first, and image-first editorial paths. OpenAI image creation remains an explicit owner action; the returned pixels are inspected before grounded copy is written.
+- Added owner-scoped private image metadata and Vercel Blob persistence through forward migration `0006_ai_visual_content.sql`. Development and production have the migration; no paid image test was run.
+- Keep published-post memory, media lifecycle controls, AI image editing, and alternate image providers for later authorized phases.
 
 ## Planned phase: Human-reviewed X workflow
 

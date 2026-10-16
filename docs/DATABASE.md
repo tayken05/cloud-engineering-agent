@@ -1,6 +1,6 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the initial migration to development and production. Later forward migrations add collection monitoring, Jobs & Opportunities, job discovery, the Task 12 private content workspace, and Task 13 AI generation audit/editorial records. Public writes remain unavailable; content and AI mutations require a managed-auth session plus the exact configured owner user ID.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the initial migration to development and production. Later forward migrations add collection monitoring, Jobs & Opportunities, job discovery, the Task 12 private content workspace, and Task 13 AI generation and visual-asset records. Public writes remain unavailable; content and AI mutations require a managed-auth session plus the exact configured owner user ID.
 
 ## Dependencies and boundaries
 
@@ -273,4 +273,12 @@ Forward migration `0005_ai_content_generation.sql` adds four enums and three tab
 
 The composite `(run_id, owner_id)` relationships prevent cross-owner suggestion/evidence attachment. A partial unique index permits one live generation per owner, while `(owner_id, idempotency_key)` prevents retry duplication. JSON payloads must be objects, idea batches are capped at five, costs/token counts are nonnegative, and accepted suggestions must link to exactly one idea or draft.
 
-Migration `0005` is applied to both the exact development and production endpoints. Both executions matched SHA-256 `e112d33cc6f68bd62230e4e8d882a927982da2c8e4b92ea4f7866662a7bb9427`, recorded the sixth Drizzle history row, changed no existing application row counts, and preserved the managed `neon_auth` catalog fingerprint. Development constraint tests ran inside a rolled-back transaction and left no test rows. Production contains zero generation rows because paid generation is disabled.
+Migration `0005` is applied to both the exact development and production endpoints. Both executions matched SHA-256 `e112d33cc6f68bd62230e4e8d882a927982da2c8e4b92ea4f7866662a7bb9427`, recorded the sixth Drizzle history row, changed no existing application row counts, and preserved the managed `neon_auth` catalog fingerprint. Development constraint tests ran inside a rolled-back transaction and left no test rows.
+
+## Task 13 AI visual content records
+
+Forward migration `0006_ai_visual_content.sql` adds `text_only`, `text_first`, and `image_first` media-path state to drafts, extends AI run kinds with `image`, and creates `content_media_assets`. The table stores the private object pathname, PNG metadata, inspected description, alt text, provider provenance, and optional generation-run relationship. PostgreSQL never stores image bytes or base64 payloads.
+
+Composite `(draft_id, owner_id)` and `(generation_run_id, owner_id)` foreign keys keep assets inside the owner boundary. Storage paths and generation runs are unique. Check constraints require positive bounded size and dimensions, approved image MIME types, nonblank descriptions, and the correct provenance fields for generated versus owner-uploaded assets. Deleting a draft cascades its media metadata; deleting a referenced generation run is restricted.
+
+Migration `0006` is applied through exact-endpoint, exact-checksum, direct-connection guards on Neon development and production. Preflight and postflight checks confirmed the seventh migration-history record, unchanged prior migration hashes, unchanged existing row counts, and unchanged managed `neon_auth` schema fingerprints. The migration adds no image rows, no paid image request was made, and normal builds never run it.

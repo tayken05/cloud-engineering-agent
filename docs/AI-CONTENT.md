@@ -1,10 +1,10 @@
 # AI Content Intelligence and Drafting
 
-Status: implemented behind owner authorization, with paid generation disabled. No real provider request was made during Task 13.
+Status: implemented behind owner authorization. Production text generation uses the owner-approved $2 application allowance. Image generation is owner initiated only and shares that allowance; no paid image request was made during this follow-up.
 
 ## Boundaries
 
-The system supports two owner-triggered operations: proposing 3–5 ideas and drafting one saved Content Studio record. Manual ideas, editing, visuals, revisions, and export continue to work without an AI provider. There is no public generation endpoint, scheduled AI job, X action, image-generation request, or automatic approval.
+The system supports owner-triggered idea batches, draft generation, and deliberately initiated image packages. Manual ideas, editing, deterministic visuals, revisions, and export continue to work without an AI provider. There is no public generation endpoint, scheduled AI job, X action, or automatic approval.
 
 `src/features/ai-content/` contains provider-independent types, prompt construction, structured schemas, validation, duplicate checks, factual-review rules, and cost calculations. `src/server/ai/` contains owner-authorized Server Actions, the OpenAI adapter, configuration, and PostgreSQL run repository. Provider data does not enter Client Component environment variables or browser bundles.
 
@@ -14,7 +14,9 @@ News requests receive at most 20 recent collected publisher records. Evergreen r
 
 All 20 Content Studio formats remain available through one registry. Historical Evolution & First Principles requires the original problem, early mechanisms, limitations, later changes, and careful chronology. Real-World Analogies separately requires a physical mapping, the real technical mechanism, and the analogy's limits. Other formats receive their own established guidance.
 
-Ideas are stored as proposed AI suggestions. The owner may accept one into Content Ideas or reject it with feedback. Draft generation checks the saved draft version first, then persists validated output through the existing revision-preserving repository. Nothing is marked published.
+Ideas are stored as proposed AI suggestions. The owner may accept one into Content Ideas or reject it with feedback. Draft generation checks and saves the selected format before the request, requires an explicit subject for a new blank draft, and distinguishes a new subject from another treatment of the current idea. A new subject detaches stale idea state. Existing idea and draft text is supplied for near-duplicate rejection. Nothing is marked published.
+
+Primary editorial subjects are Cloud Engineering, Networking, Linux, DevOps, Infrastructure, Kubernetes, and related Security. Generic programming examples are used only when they directly clarify those domains. Format-specific guidance varies hook, depth, shape, and ending, while forbidding fabricated experiences, invented quotes, forced engagement, and generic textbook definitions. Generated publishable copy and visual text reject Unicode em and en dashes; ordinary technical hyphens remain valid.
 
 ## Provider integration
 
@@ -27,6 +29,10 @@ The OpenAI SDK is pinned at 7.34.0. The adapter uses the Responses API, `text.fo
 
 Model availability and pricing can change. Review those sources and update the configured rates before enabling a positive allowance.
 
+OpenAI image generation uses the direct Images API with `gpt-image-2.5-flare`, one PNG at a time, low quality by default, and a 120-second bounded request. A second bounded Responses API request inspects the actual pixels before image-first copy is written. Square output is 1024 by 1024; landscape is 1536 by 1024. Generated and owner-provided PNGs are stored in private Vercel Blob storage, while PostgreSQL stores owner-scoped metadata and relationships only. Private authenticated handlers stream and download assets. Official references: [image generation](https://developers.openai.com/api/docs/guides/image-generation) and [Vercel private Blob storage](https://vercel.com/docs/vercel-blob/private-storage).
+
+The three editorial paths are text-only, text-first, and image-first. Image-first generation cannot write a caption until inspection returns a description of what is actually visible. Ask Grok image-first prompts must ask about that description and keep the correct answer in private moderator notes. Generated photorealistic images are editorial artwork, never documentary evidence.
+
 ## Validation and factual safeguards
 
 Structured results are rejected unless they match the expected counts, enums, bounds, X limits, evidence IDs, factual-claim classifications, and visual allowlist. Source-backed facts, interpretations, and hypothetical examples remain distinct. Missing evidence, unsafe technical commands, unsupported historical claims, incomplete analogies, and other review flags force Needs Review. Only the six deterministic visual templates, declared aspect ratios, four accent colors, and bounded text labels are accepted; executable SVG, HTML, and JavaScript are never accepted as model output.
@@ -35,15 +41,18 @@ Validation does not establish truth. Editorial review must compare important cla
 
 ## Spending and reliability controls
 
-Default configuration:
+Fail-closed defaults:
 
 ```text
 AI_GENERATION_ENABLED=false
 AI_MONTHLY_BUDGET_USD=0
 AI_TEXT_MODEL=gpt-6-luna
+AI_IMAGE_GENERATION_ENABLED=false
+AI_IMAGE_MODEL=gpt-image-2.5-flare
+AI_IMAGE_MAX_COST_USD=0.03
 ```
 
-A request can proceed only when the authenticated user is the exact configured owner, generation is enabled, the server key exists, and the allowance is positive. PostgreSQL serializes reservations per owner, permits one running request, reserves a conservative maximum cost before provider access, and releases the reservation after success or failure. Idempotency keys prevent retry duplication, while a bounded lease recovers interrupted runs. Provider/model, timestamps, response ID, token usage, estimated cost, and safe error codes are retained.
+A request can proceed only when the authenticated user is the exact configured owner, generation is enabled, the server key exists, and the shared allowance is positive. PostgreSQL serializes reservations per owner, permits one running request, reserves a conservative maximum cost before provider access, and releases the reservation after success or failure. Image generation and inspection reserve up to the configured per-request amount; image-first grounded copy is a separate bounded text request under the same monthly allowance. Idempotency keys prevent retry duplication, while a six-minute database lease covers the bounded image, inspection, and caption sequence and then permits crash recovery. Provider/model, timestamps, response ID, token usage, estimated cost, and safe error codes are retained.
 
 The application allowance is not a provider billing ceiling. Provider project budgets and alerts should also be configured before activation.
 

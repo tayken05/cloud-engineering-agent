@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: the deployed platform includes the intelligence schema, 12-source daily news collector, a public database-backed Jobs & Opportunities Hub, and an owner-authenticated persistent Educational Content Studio. Task 10 continuously verifies relevant vacancies across seven official employer boards. Tasks 11–13 preserve all 20 content formats, deterministic visual creation, revision history, cross-device storage, and a provider-neutral AI idea/draft engine. Paid generation remains disabled with a zero allowance; final owner enrollment, verified-talent workflows, and X integrations remain planned.
+Status: the deployed platform includes the intelligence schema, 12-source daily news collector, a public database-backed Jobs & Opportunities Hub, and an owner-authenticated persistent Educational Content Studio. Task 10 continuously verifies relevant vacancies across seven official employer boards. Tasks 11–13 preserve all 20 content formats, deterministic visual creation, revision history, cross-device storage, AI idea/draft generation, and an owner-initiated visual-first workflow with private durable assets. Publishing, verified-talent workflows, and X integrations remain planned.
 Recorded: 2026-10-15.
 
 ## Vision and boundaries
@@ -120,7 +120,7 @@ Integration direction and current status:
 | --- | --- |
 | Neon PostgreSQL | Intelligence schema, source catalog, publisher items, and durable collection-run monitoring on isolated development and production |
 | Drizzle ORM | Reviewed migrations, bounded Sources/Stories reads, idempotent source-item persistence, and atomic collection leases |
-| OpenAI Responses API | Server-only structured idea and draft generation is implemented but disabled; later activation requires an explicit positive allowance and credential |
+| OpenAI Responses and Images APIs | Owner-only structured idea/draft generation and deliberately initiated image packages share the approved application allowance; no automatic AI schedule exists |
 | Vercel | Shell hosting implemented in Task 3B; future releases require task authorization |
 | Official X API where feasible | Approved tracking and engagement capabilities |
 | Scheduled and durable background processing | Daily Vercel Cron ingestion is implemented; digests and other asynchronous work remain planned |
@@ -140,4 +140,4 @@ The Content Ideas and Content Studio workspaces now use managed Neon Auth, exact
 
 The owner-only Ideas and Studio routes now contain a modular OpenAI Responses API integration with strict structured outputs, bounded 3–5 idea batches, evidence-aware prompts, format-specific drafting, deterministic visual specifications, editorial accept/reject states, request idempotency, leases, and atomic monthly allowance reservation. Collected publisher records remain untrusted research input and never become system instructions or independent verification. AI output always requires human review.
 
-`AI_GENERATION_ENABLED=false` and `AI_MONTHLY_BUDGET_USD=0` are the operational defaults. No provider credential is required for manual use, no real model request was made during implementation or testing, and no scheduled AI job exists. See `docs/AI-CONTENT.md` for activation and review rules.
+`AI_GENERATION_ENABLED=false`, `AI_IMAGE_GENERATION_ENABLED=false`, and `AI_MONTHLY_BUDGET_USD=0` remain the source-control defaults. Production uses the separately approved allowance and server-only credential. No image request runs automatically or during tests, and no scheduled AI job exists. See `docs/AI-CONTENT.md` for activation and review rules.

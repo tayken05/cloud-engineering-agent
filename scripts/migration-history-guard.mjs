@@ -4,6 +4,7 @@ import { jobsMigrationConfig } from "./jobs-migration.config.mjs";
 import { jobDiscoveryMigrationConfig } from "./job-discovery-migration.config.mjs";
 import { contentWorkspaceMigrationConfig } from "./content-workspace-migration.config.mjs";
 import { aiContentMigrationConfig } from "./ai-content-migration.config.mjs";
+import { aiVisualMigrationConfig } from "./ai-visual-migration.config.mjs";
 
 export const approvedMigrationHistory = Object.freeze([
   Object.freeze({
@@ -35,6 +36,11 @@ export const approvedMigrationHistory = Object.freeze([
     hash: aiContentMigrationConfig.migrationSha256,
     tag: aiContentMigrationConfig.migrationTag,
     timestamp: aiContentMigrationConfig.migrationTimestamp,
+  }),
+  Object.freeze({
+    hash: aiVisualMigrationConfig.migrationSha256,
+    tag: aiVisualMigrationConfig.migrationTag,
+    timestamp: aiVisualMigrationConfig.migrationTimestamp,
   }),
 ]);
 

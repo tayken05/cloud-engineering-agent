@@ -20,6 +20,7 @@ export const VISUAL_TEMPLATES = [
   "visual-analogy",
 ] as const;
 export const VISUAL_ASPECTS = ["square", "landscape"] as const;
+export const CONTENT_MEDIA_PATHS = ["text_only", "text_first", "image_first"] as const;
 
 export type AudienceLevel = (typeof AUDIENCE_LEVELS)[number];
 export type IdeaStatus = (typeof IDEA_STATUSES)[number];
@@ -28,6 +29,7 @@ export type EngagementStyle = (typeof ENGAGEMENT_STYLES)[number];
 export type VisualTemplateId = (typeof VISUAL_TEMPLATES)[number];
 export type VisualAspect = (typeof VISUAL_ASPECTS)[number];
 export type TechnicalCategory = (typeof TECHNICAL_CATEGORIES)[number];
+export type ContentMediaPath = (typeof CONTENT_MEDIA_PATHS)[number];
 
 export type EvidenceReference = Readonly<{
   id: string;
@@ -71,6 +73,11 @@ export type VisualSpecification = Readonly<{
 export type DraftSnapshot = Readonly<{
   caption: string;
   explanation: string;
+  formatId: ContentFormatId;
+  ideaId: string | null;
+  imageAltText: string;
+  imagePrompt: string;
+  mediaPath: ContentMediaPath;
   moderatorNotes: string;
   pollOptions: readonly string[];
   threadPosts: readonly string[];
@@ -93,6 +100,9 @@ export type ContentDraft = Readonly<{
   formatId: ContentFormatId;
   id: string;
   ideaId: string | null;
+  imageAltText: string;
+  imagePrompt: string;
+  mediaPath: ContentMediaPath;
   moderatorNotes: string;
   pollOptions: readonly string[];
   recordVersion: number;
@@ -102,6 +112,19 @@ export type ContentDraft = Readonly<{
   title: string;
   updatedAt: string;
   visual: VisualSpecification | null;
+}>;
+
+export type ContentMediaAsset = Readonly<{
+  altText: string;
+  contentType: "image/png" | "image/jpeg" | "image/webp";
+  createdAt: string;
+  draftId: string;
+  height: number;
+  id: string;
+  imageDescription: string;
+  origin: "ai_generated" | "owner_upload";
+  provider: string | null;
+  width: number;
 }>;
 
 export type ContentWorkspaceState = Readonly<{

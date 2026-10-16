@@ -4,15 +4,18 @@ import type {
   EngagementStyle,
   TechnicalCategory,
   VisualSpecification,
+  ContentMediaPath,
 } from "../content-studio/content-types.ts";
 
 export const AI_RESEARCH_PATHS = ["news", "evergreen"] as const;
 export const AI_PRESENTATIONS = ["standalone", "thread", "poll", "visual"] as const;
 export const AI_VERIFICATION_STATUSES = ["evidence_backed", "needs_review"] as const;
+export const AI_DRAFT_INTENTS = ["develop_current", "new_subject"] as const;
 
 export type AiResearchPath = (typeof AI_RESEARCH_PATHS)[number];
 export type AiPresentation = (typeof AI_PRESENTATIONS)[number];
 export type AiVerificationStatus = (typeof AI_VERIFICATION_STATUSES)[number];
+export type AiDraftIntent = (typeof AI_DRAFT_INTENTS)[number];
 
 export type AiResearchEvidence = Readonly<{
   id: string;
@@ -66,6 +69,8 @@ export type AiDraftRequest = Readonly<{
   draftId: string;
   expectedVersion: number;
   idempotencyKey: string;
+  intent: AiDraftIntent;
+  subject: string;
 }>;
 
 export type AiDraftOutput = Readonly<{
@@ -73,6 +78,12 @@ export type AiDraftOutput = Readonly<{
   evidenceSourceItemIds: readonly string[];
   explanation: string;
   factualClaims: readonly AiFactualClaim[];
+  mediaRecommendation: Readonly<{
+    altText: string;
+    imagePrompt: string;
+    path: ContentMediaPath;
+    rationale: string;
+  }>;
   moderatorNotes: string;
   pollOptions: readonly string[];
   reviewFlags: readonly string[];
@@ -139,7 +150,7 @@ export interface AiRunStore {
     evidenceIds: readonly string[];
     fingerprint: string;
     idempotencyKey: string;
-    kind: "idea_batch" | "draft";
+    kind: "idea_batch" | "draft" | "image";
     model: string;
     monthlyBudgetMicrousd: number;
     ownerId: string;
@@ -155,7 +166,7 @@ export interface AiRunStore {
     responseId: string | null;
     runId: string;
     suggestions: readonly Readonly<{
-      kind: "idea_batch" | "draft";
+      kind: "idea_batch" | "draft" | "image";
       payload: Readonly<Record<string, unknown>>;
       verificationStatus: AiVerificationStatus;
     }>[];

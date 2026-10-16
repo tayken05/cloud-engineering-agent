@@ -43,16 +43,16 @@ async function inspect(client, production) {
     const identity = (await client.query("SELECT current_database() database_name,current_schema() current_schema,current_schemas(false) schemas")).rows[0];
     if (identity?.database_name !== "neondb" || identity.current_schema !== "public" || identity.schemas?.includes("neon_auth")) stop("The database identity or search path is unsafe.");
     const history = (await client.query("SELECT hash,created_at FROM drizzle.__drizzle_migrations ORDER BY id")).rows;
-    if (!historyMatches(history, 5) && !historyMatches(history, 6)) stop("Migration history does not match the reviewed baseline.");
+    if (!historyMatches(history, 5) && !historyMatches(history, 6) && !historyMatches(history, 7)) stop("Migration history does not match the reviewed baseline.");
     const existing = (await client.query("SELECT c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relname=ANY($1::text[]) ORDER BY c.relname", [config.tables])).rows.map((row) => row.relname);
-    if ((history.length === 6) !== (existing.length === config.tables.length)) stop("AI-content objects conflict with migration history.");
+    if ((history.length >= 6) !== (existing.length === config.tables.length)) stop("AI-content objects conflict with migration history.");
     if (existing.length !== 0 && existing.length !== config.tables.length) stop("Only part of the AI-content schema exists.");
     const counts = (await client.query("SELECT (SELECT count(*)::integer FROM sources) sources,(SELECT count(*)::integer FROM source_items) source_items,(SELECT count(*)::integer FROM jobs) jobs,(SELECT count(*)::integer FROM collection_runs) collection_runs,(SELECT count(*)::integer FROM job_discovery_runs) job_runs,(SELECT count(*)::integer FROM content_ideas) ideas,(SELECT count(*)::integer FROM content_drafts) drafts")).rows[0];
-    const aiCounts = history.length === 6 ? (await client.query("SELECT (SELECT count(*)::integer FROM ai_generation_runs) runs,(SELECT count(*)::integer FROM ai_content_suggestions) suggestions,(SELECT count(*)::integer FROM ai_generation_evidence) evidence")).rows[0] : { runs: 0, suggestions: 0, evidence: 0 };
+    const aiCounts = history.length >= 6 ? (await client.query("SELECT (SELECT count(*)::integer FROM ai_generation_runs) runs,(SELECT count(*)::integer FROM ai_content_suggestions) suggestions,(SELECT count(*)::integer FROM ai_generation_evidence) evidence")).rows[0] : { runs: 0, suggestions: 0, evidence: 0 };
     const auth = await authFingerprint(client);
     if (production && auth.count !== productionMigrationConfig.expectedAuthTableCount) stop("The managed authentication catalog differs from the verified baseline.");
     await client.query("COMMIT");
-    return { aiCounts, applied: history.length === 6, auth, counts };
+    return { aiCounts, applied: history.length >= 6, auth, counts };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;

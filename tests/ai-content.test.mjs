@@ -6,7 +6,7 @@ import { CONTENT_FORMATS } from "../src/features/content-studio/content-formats.
 import { draftInput, draftInstructions, ideaInput, ideaInstructions } from "../src/features/ai-content/prompts.ts";
 import { generateDraft, generateIdeaBatch } from "../src/features/ai-content/service.ts";
 import { AiGenerationError } from "../src/features/ai-content/types.ts";
-import { isNearDuplicate, validateDraftOutput, validateIdeaSuggestions } from "../src/features/ai-content/validation.ts";
+import { isNearDuplicate, validateDraftOutput, validateDraftRequest, validateIdeaSuggestions } from "../src/features/ai-content/validation.ts";
 import { applyAiBudgetAvailability, getAiPublicStatus, readAiRuntimeConfig } from "../src/server/ai/config.ts";
 
 const evidenceId = "11111111-1111-4111-8111-111111111111";
@@ -109,6 +109,7 @@ function draftOutput(overrides = {}) {
     evidenceSourceItemIds: [evidenceId],
     explanation: "Packets follow selected paths. This explanation separates evidence from interpretation.",
     factualClaims: [{ evidenceSourceItemIds: [evidenceId], kind: "sourced_fact", reviewStatus: "supported", text: "The publisher describes the update." }],
+    mediaRecommendation: { altText: "", imagePrompt: "", path: "text_only", rationale: "The mechanism is clearer as concise text." },
     moderatorNotes: "Human technical review is required.",
     pollOptions: [],
     reviewFlags: [],
@@ -123,10 +124,16 @@ function draftOutput(overrides = {}) {
 test("all 20 formats remain unified with separate first-principles and analogy guidance", () => {
   assert.equal(CONTENT_FORMATS.length, 20);
   assert.equal(new Set(CONTENT_FORMATS.map((item) => item.id)).size, 20);
+  assert.equal(new Set(CONTENT_FORMATS.map((item) => item.guidance)).size, 20);
   const instructions = ideaInstructions();
   assert.match(instructions, /Historical Evolution & First Principles is independent/);
   assert.match(instructions, /Real-World Analogies is equally independent/);
+  assert.match(instructions, /Cloud Engineering, Networking, Linux, DevOps, Infrastructure, Kubernetes/);
+  assert.match(instructions, /Do not write generic textbook definitions/);
   assert.notEqual(draftInstructions("historical-first-principles"), draftInstructions("real-world-analogies"));
+  assert.match(draftInstructions("ask-grok"), /specific evidence visible/i);
+  assert.match(draftInstructions("tech-humor-memes"), /punchline/i);
+  assert.match(draftInstructions("troubleshooting-challenges"), /diagnosis private/i);
 });
 
 test("every AI Server Action authorizes the owner before provider or content access", async () => {
@@ -182,7 +189,7 @@ test("publisher prompt injection remains bounded untrusted data", () => {
 
 test("draft generation preserves evidence, X thread boundaries, and safe visual templates", async () => {
   const store = new MemoryStore();
-  const result = await generateDraft({ angle: "Use a packet journey", config, draft, evidence, idempotencyKey: "ai-draft:11111111-1111-4111-8111-111111111111", idea: null, ownerId: "owner", provider: provider(draftOutput()), store });
+  const result = await generateDraft({ angle: "Use a packet journey", config, draft, evidence, existingContent: [], idempotencyKey: "ai-draft:11111111-1111-4111-8111-111111111111", idea: null, intent: "new_subject", ownerId: "owner", provider: provider(draftOutput()), store, subject: "Cloud routing" });
   assert.equal(result.output.threadPosts.length, 2);
   assert.equal(result.output.visual.templateId, "cloud-architecture");
   assert.equal(result.output.evidenceSourceItemIds[0], evidenceId);
@@ -200,6 +207,8 @@ test("unsafe commands, unsupported claims, bad visual code, and overlong X outpu
   assert.match(reviewed.reviewFlags.join(" "), /280/);
   assert.match(reviewed.reviewFlags.join(" "), /destructive/);
   assert.throws(() => validateDraftOutput(draftOutput({ visual: { ...draftOutput().visual, templateId: "<script>alert(1)</script>" } }), "visual-education", new Set([evidenceId])), /malformed/);
+  assert.throws(() => validateDraftOutput(draftOutput({ caption: "Packets move through policy — then routing." }), "beginner-friendly-education", new Set([evidenceId])), /malformed/);
+  assert.throws(() => validateDraftOutput(draftOutput({ title: "Cloud routing – without the textbook voice" }), "beginner-friendly-education", new Set([evidenceId])), /malformed/);
 });
 
 test("disabled and zero-budget configurations reject before invoking the provider", async () => {
@@ -243,7 +252,35 @@ test("concurrent requests cannot reserve beyond the bounded owner allowance", as
 });
 
 test("draft inputs preserve the requested angle but classify all records as untrusted", () => {
-  const value = draftInput(draft, null, "A different first-principles angle", evidence);
+  const value = draftInput(draft, null, "A different first-principles angle", evidence, "new_subject", "Cloud routing policy", ["Avoid this prior route explainer"]);
   assert.match(value, /requestedAngle/);
+  assert.match(value, /requiredSubject/);
+  assert.match(value, /existingContentToAvoidRepeating/);
   assert.match(value, /untrustedResearchRecords/);
+});
+
+test("new-subject draft requests cannot let the model guess a blank topic", () => {
+  const base = {
+    angle: "",
+    draftId: draft.id,
+    expectedVersion: 1,
+    idempotencyKey: "ai-draft:33333333-3333-4333-8333-333333333333",
+    intent: "new_subject",
+    subject: "Linux network namespaces",
+  };
+  assert.equal(validateDraftRequest(base).subject, "Linux network namespaces");
+  assert.throws(() => validateDraftRequest({ ...base, subject: "" }), /invalid/);
+  assert.equal(validateDraftRequest({ ...base, intent: "develop_current", subject: "" }).intent, "develop_current");
+});
+
+test("draft generation rejects near-identical prior content", async () => {
+  const store = new MemoryStore();
+  const output = draftOutput();
+  await assert.rejects(generateDraft({
+    angle: "Rewrite it", config, draft, evidence,
+    existingContent: [`${output.title} ${output.caption} ${output.threadPosts.join(" ")}`],
+    idempotencyKey: "ai-draft:44444444-4444-4444-8444-444444444444", idea: null,
+    intent: "develop_current", ownerId: "owner", provider: provider(output), store, subject: "Cloud routing",
+  }), (error) => error.code === "invalid_output");
+  assert.equal(store.failed[0].errorCode, "invalid_output");
 });

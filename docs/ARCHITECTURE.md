@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the deployed application includes the responsive shell, 12-source daily news collector, a public Jobs & Opportunities Hub with daily employer-board discovery, an owner-authenticated PostgreSQL-backed Educational Content Studio, and a disabled-by-default AI idea/draft engine. Final owner enrollment is pending; story grouping, publishing, and engagement workflows remain planned.
+Status: the deployed application includes the responsive shell, 12-source daily news collector, a public Jobs & Opportunities Hub with daily employer-board discovery, an owner-authenticated PostgreSQL-backed Educational Content Studio, and owner-triggered AI idea, draft, and visual-package generation. Story grouping, publishing, and engagement workflows remain planned.
 
 ## Current application
 
@@ -68,12 +68,12 @@ Task 10 adds `0003_job_discovery.sql`, the separate `job_discovery_runs` lease/m
 
 ## Educational Content Studio — Task 11
 
-- `src/features/content-studio/` owns the 20-format catalog, validated local document model, X preflight rules, visual specifications, and disabled provider-neutral AI image contract.
+- `src/features/content-studio/` owns the 20-format catalog, validated content model, X preflight rules, deterministic visual specifications, and the provider-neutral AI image contract.
 - `src/components/content/` owns interactive Client Components for ideas, drafts, preview, revisions, clipboard export, and Canvas PNG export. Server Components remain responsible for routes and the bounded evidence query.
 - `src/server/content/list-content-evidence.ts` is a read-only server boundary returning at most 40 recent publisher records. It creates no build-time connection and returns no private or operational fields.
 - Device storage is versioned, validated on read, limited to 100 ideas, 100 drafts, 20 revisions per draft, 12 evidence references per document, and 1 MB serialized data. It is an operator convenience rather than durable storage or cross-device synchronization.
 - Six deterministic SVG/Canvas templates provide square and landscape previews and real PNG downloads without server compute, paid generation, PostgreSQL image bytes, or Vercel filesystem persistence.
-- The OpenAI Images and xAI Grok Imagine adapters are interface plans only. Controls state that providers are disabled. No key, SDK, API request, or billable capability is included.
+- The OpenAI Images adapter generates one owner-requested PNG and then inspects its actual pixels through the Responses API. xAI remains an interface-level future option. Private Vercel Blob stores media bytes and PostgreSQL stores owner-scoped metadata; automated tests never call either paid API.
 - The Ask Grok format stores an editable caption, technical visual, and private moderator answer. It never claims a response was received and does not fabricate conversation screenshots.
 - See `docs/CONTENT-STUDIO.md` for formats, storage boundaries, review checks, visual rendering, and future provider requirements.
 
@@ -174,4 +174,12 @@ The browser migration reads only the existing versioned Task 11 storage key, app
 
 `ai_generation_runs` records idempotency, provider/model, status, leases, token usage, conservative cost reservations, final estimates, and safe error codes. `ai_content_suggestions` retains proposed/accepted/rejected structured outputs and feedback. `ai_generation_evidence` records exact source-item provenance. A PostgreSQL advisory transaction lock and one-running-run index serialize reservations per owner; expired leases recover. This application allowance reduces accidental spend but is not a provider billing ceiling.
 
-The configurable default model is `gpt-6-luna`, selected for bounded cost-sensitive text work. Model and price inputs must be reviewed against current official documentation before activation. Production has no positive allowance or AI key configured, so the UI reports generation unavailable and the provider cannot be called. Details are in `docs/AI-CONTENT.md`.
+The configurable default text model is `gpt-6-luna`; owner-initiated images default to `gpt-image-2.5-flare` at low quality. Both use the same atomic application allowance, one-running-request guard, idempotency records, and safe error metadata. The selected Studio format is persisted before generation, a blank draft requires an explicit subject, and new-subject generation detaches stale idea state. Details are in `docs/AI-CONTENT.md`.
+
+## Task 13 follow-up: Editorial state and visual packages
+
+The Studio exposes four distinct operations: create a blank manual draft, develop the current idea, start a new subject, and change a saved draft's format. The provider receives the persisted selected format and explicit intent. Existing idea and draft copy is part of near-duplicate detection, so repeated generic subjects cannot silently pass as new work.
+
+`content_media_assets` relates a private object to its owner, draft, and optional AI run. Generated assets require provider, model, and prompt provenance; owner uploads require no fake provider record. Composite owner foreign keys prevent cross-owner attachment. The private media routes authenticate before upload or download, reject cross-origin writes, bound PNG size and dimensions, and use no-store responses. No binary or base64 image is stored in PostgreSQL.
+
+The image-first flow is generate, validate PNG, inspect actual pixels, save privately, then create grounded copy from the inspection. The text-first flow may create a supporting image after text review. Text-only remains available. Ask Grok uses actual inspected details for its question and keeps the answer in private moderator notes; it never claims Grok responded.

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { generateDraft, generateIdeaBatch } from "@/features/ai-content/service";
+import { prepareDraftGenerationContext } from "@/features/ai-content/draft-context";
 import { AiGenerationError, type AiIdeaRequest, type AiPublicStatus } from "@/features/ai-content/types";
 import { validateDraftRequest, validateIdeaSuggestions } from "@/features/ai-content/validation";
 import type { ContentWorkspaceState, EvidenceReference } from "@/features/content-studio/content-types";
@@ -120,10 +121,17 @@ export async function generateAiDraftAction(value: unknown): Promise<AiDraftActi
     const state = await loadContentWorkspace(ownerId);
     const draft = state.drafts.find((item) => item.id === request.draftId);
     if (!draft || draft.recordVersion !== request.expectedVersion) return { error: "This draft changed in another session. Reload before generating.", ok: false };
-    const idea = draft.ideaId ? state.ideas.find((item) => item.id === draft.ideaId) ?? null : null;
+    const attachedIdea = draft.ideaId ? state.ideas.find((item) => item.id === draft.ideaId) ?? null : null;
+    const context = prepareDraftGenerationContext({ draft, idea: attachedIdea, intent: request.intent, requestedSubject: request.subject });
+    const { idea, subject } = context;
     const evidenceIds = [...new Set([...draft.evidence, ...(idea?.evidence ?? [])].map((item) => item.id))];
     const evidence = await listAiEvidence({ ids: evidenceIds, limit: 12 });
-    const generated = await generateDraft({ angle: request.angle, config, draft, evidence, idempotencyKey: request.idempotencyKey, idea, ownerId, provider, store });
+    const existingContent = await listExistingContentSubjects(ownerId);
+    const generationDraft = context.draft;
+    const generated = await generateDraft({
+      angle: request.angle, config, draft: generationDraft, evidence, existingContent,
+      idempotencyKey: request.idempotencyKey, idea, intent: request.intent, ownerId, provider, store, subject,
+    });
     if (generated.duplicate || !generated.output) return { error: "This draft-generation request was already processed. Reload the workspace to see its result.", ok: false };
     const output = generated.output;
     await saveContentDraft(ownerId, {
@@ -131,6 +139,10 @@ export async function generateAiDraftAction(value: unknown): Promise<AiDraftActi
       caption: output.caption,
       evidence: evidence.filter((item) => output.evidenceSourceItemIds.includes(item.id)).map(evidenceReference),
       explanation: output.explanation,
+      ideaId: request.intent === "new_subject" ? null : draft.ideaId,
+      imageAltText: output.mediaRecommendation.altText,
+      imagePrompt: output.mediaRecommendation.imagePrompt,
+      mediaPath: output.mediaRecommendation.path,
       moderatorNotes: [output.moderatorNotes, `AI verification: ${output.verificationStatus}.`, ...output.reviewFlags].filter(Boolean).join("\n"),
       pollOptions: output.pollOptions,
       status: "draft",

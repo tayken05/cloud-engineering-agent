@@ -43,7 +43,7 @@ The `@/*` alias maps to `src/*`. The application uses the [official Next.js gene
 
 ## Scope and secrets
 
-Authentication, private accounts, employer/candidate workflows, AI-assisted generation, X API, and notifications remain future work. Unpublished Task 11 content is stored only in the operator's browser because server-side owner authorization does not yet exist; see [docs/CONTENT-STUDIO.md](docs/CONTENT-STUDIO.md). Local and dedicated production migration credentials are used only by authorized server-side tooling and remain outside source control. Public routes expose no administrative writes. Do not install or configure roadmap items without authorization. Keep this project separate from the Football X Agent.
+Owner authentication, persistent private content, AI-assisted ideas and drafts, and an owner-initiated visual-content workflow are implemented. Generated and uploaded images use private durable storage and owner-scoped PostgreSQL metadata; no AI request is scheduled or publicly callable. Employer/candidate accounts, X publishing, and notifications remain future work. See [docs/CONTENT-STUDIO.md](docs/CONTENT-STUDIO.md). Local and dedicated production migration credentials are used only by authorized server-side tooling and remain outside source control. Public routes expose no administrative writes. Keep this project separate from the Football X Agent.
 
 Environment files, private keys, local credentials, build output, and dependencies are excluded from Git. No secrets or environment files are required for Task 1. Keep future secrets server-side and never place them in `NEXT_PUBLIC_*` variables.
 
