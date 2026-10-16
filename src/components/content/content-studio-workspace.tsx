@@ -3,6 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 
 import type { AiPublicStatus } from "@/features/ai-content/types";
+import { aiStatusLabel, aiStatusMessage } from "@/features/ai-content/status-copy";
 import { CONTENT_FORMATS, getContentFormat, type ContentFormatId } from "@/features/content-studio/content-formats";
 import { PLANNED_IMAGE_PROVIDERS } from "@/features/content-studio/image-provider";
 import type { ContentDraft, ContentWorkspaceState, EvidenceOption } from "@/features/content-studio/content-types";
@@ -217,7 +218,7 @@ export function ContentStudioWorkspace({
           <section className="studio-panel ai-workspace-panel" aria-labelledby="ai-draft-heading">
             <div className="studio-panel-heading">
               <div><p className="eyebrow">AI drafting assistant</p><h2 id="ai-draft-heading">Develop this approved idea</h2></div>
-              <span className={aiStatus.available ? "status-chip status-safe" : "status-chip"}>{aiStatus.available ? aiStatus.model : "Disabled"}</span>
+              <span className={aiStatus.available ? "status-chip status-safe" : "status-chip"}>{aiStatusLabel(aiStatus)}</span>
             </div>
             {aiStatus.available ? (
               <div className="draft-fields">
@@ -230,7 +231,7 @@ export function ContentStudioWorkspace({
                 </div>
               </div>
             ) : (
-              <div className="studio-state"><strong>Paid generation is unavailable</strong><p>Generation remains disabled until a server-side API key, an explicit enable flag, and a positive owner-approved allowance are all configured.</p></div>
+              <div className="studio-state"><strong>Paid generation is unavailable</strong><p>{aiStatusMessage(aiStatus)}</p></div>
             )}
           </section>
 

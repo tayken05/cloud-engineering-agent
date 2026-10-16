@@ -7,7 +7,7 @@ import { draftInput, draftInstructions, ideaInput, ideaInstructions } from "../s
 import { generateDraft, generateIdeaBatch } from "../src/features/ai-content/service.ts";
 import { AiGenerationError } from "../src/features/ai-content/types.ts";
 import { isNearDuplicate, validateDraftOutput, validateIdeaSuggestions } from "../src/features/ai-content/validation.ts";
-import { getAiPublicStatus, readAiRuntimeConfig } from "../src/server/ai/config.ts";
+import { applyAiBudgetAvailability, getAiPublicStatus, readAiRuntimeConfig } from "../src/server/ai/config.ts";
 
 const evidenceId = "11111111-1111-4111-8111-111111111111";
 const evidence = [{
@@ -210,7 +210,16 @@ test("disabled and zero-budget configurations reject before invoking the provide
   assert.equal(calls, 0);
   assert.equal(getAiPublicStatus({}).reason, "disabled");
   assert.equal(getAiPublicStatus({ AI_GENERATION_ENABLED: "true", AI_MONTHLY_BUDGET_USD: "0" }).reason, "zero_budget");
+  assert.equal(getAiPublicStatus({ AI_GENERATION_ENABLED: " TRUE ", AI_MONTHLY_BUDGET_USD: "2", OPENAI_API_KEY: "sk-test-12345678901234567890" }).reason, "available");
+  assert.equal(getAiPublicStatus({ AI_GENERATION_ENABLED: "enabled", AI_MONTHLY_BUDGET_USD: "2", OPENAI_API_KEY: "sk-test-12345678901234567890" }).reason, "invalid_configuration");
   assert.equal(readAiRuntimeConfig({}).monthlyBudgetMicrousd, 0);
+});
+
+test("owner workspace status reflects the database-backed monthly allowance", () => {
+  const available = getAiPublicStatus({ AI_GENERATION_ENABLED: "true", AI_MONTHLY_BUDGET_USD: "2", OPENAI_API_KEY: "sk-test-12345678901234567890" });
+  assert.equal(applyAiBudgetAvailability(available, 1_999_999, 2_000_000).reason, "available");
+  assert.equal(applyAiBudgetAvailability(available, 2_000_000, 2_000_000).reason, "budget_exhausted");
+  assert.equal(applyAiBudgetAvailability(available, Number.NaN, 2_000_000).reason, "status_unavailable");
 });
 
 test("provider failure and timeout release the reservation with safe error codes", async () => {

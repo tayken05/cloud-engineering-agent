@@ -13,8 +13,16 @@ function boundedNumber(value: string | undefined, fallback: number, minimum: num
   return parsed;
 }
 
+function booleanFlag(value: string | undefined, fallback = false): boolean {
+  if (value === undefined || value.trim() === "") return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  throw new Error("AI generation configuration is invalid.");
+}
+
 export function readAiRuntimeConfig(environment: NodeJS.ProcessEnv = process.env): AiRuntimeConfig {
-  const enabled = environment.AI_GENERATION_ENABLED === "true";
+  const enabled = booleanFlag(environment.AI_GENERATION_ENABLED);
   const model = (environment.AI_TEXT_MODEL?.trim() || DEFAULT_MODEL).slice(0, 128);
   if (!/^[a-z0-9][a-z0-9._-]{1,127}$/i.test(model)) throw new Error("AI generation configuration is invalid.");
   const budgetUsd = boundedNumber(environment.AI_MONTHLY_BUDGET_USD, 0, 0, 10_000);
@@ -46,4 +54,19 @@ export function getAiPublicStatus(environment: NodeJS.ProcessEnv = process.env):
   } catch {
     return { available: false, budgetConfigured: false, model: DEFAULT_MODEL, reason: "invalid_configuration" };
   }
+}
+
+export function applyAiBudgetAvailability(
+  status: AiPublicStatus,
+  committedMicrousd: number,
+  monthlyBudgetMicrousd: number,
+): AiPublicStatus {
+  if (!status.available) return status;
+  if (!Number.isFinite(committedMicrousd) || committedMicrousd < 0) {
+    return { ...status, available: false, reason: "status_unavailable" };
+  }
+  if (committedMicrousd >= monthlyBudgetMicrousd) {
+    return { ...status, available: false, reason: "budget_exhausted" };
+  }
+  return status;
 }

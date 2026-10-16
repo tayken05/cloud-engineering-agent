@@ -8,7 +8,7 @@ import { validateDraftRequest, validateIdeaSuggestions } from "@/features/ai-con
 import type { ContentWorkspaceState, EvidenceReference } from "@/features/content-studio/content-types";
 import { getRequiredOwnerId } from "@/server/auth/owner";
 import { loadContentWorkspace, saveContentDraft, saveContentIdea } from "@/server/content/workspace-repository";
-import { getAiPublicStatus, readAiRuntimeConfig, readOpenAiApiKey } from "./config";
+import { readAiRuntimeConfig, readOpenAiApiKey } from "./config";
 import { createOpenAiProvider } from "./openai-provider";
 import {
   getAiRunSuggestion,
@@ -20,6 +20,7 @@ import {
   setAiSuggestionDecision,
   type AiSuggestionView,
 } from "./repository";
+import { getOwnerAiStatus } from "./status";
 
 export type AiIdeaActionResult = Readonly<{
   error?: string;
@@ -56,8 +57,8 @@ function evidenceReference(item: Awaited<ReturnType<typeof listAiEvidence>>[numb
 }
 
 export async function getAiWorkspaceStatus(): Promise<AiPublicStatus> {
-  await getRequiredOwnerId();
-  return getAiPublicStatus();
+  const ownerId = await getRequiredOwnerId();
+  return getOwnerAiStatus(ownerId);
 }
 
 export async function generateAiIdeasAction(request: AiIdeaRequest): Promise<AiIdeaActionResult> {

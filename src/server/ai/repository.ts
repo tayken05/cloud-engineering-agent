@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { AiGenerationError, type AiIdeaSuggestion, type AiRunStore, type AiVerificationStatus } from "@/features/ai-content/types";
 import {
@@ -55,7 +55,7 @@ export class PostgresAiRunStore implements AiRunStore {
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
       const usage = await tx.select({
         total: sql<number>`coalesce(sum(case when ${aiGenerationRuns.status} = 'running' then ${aiGenerationRuns.reservedCostMicrousd} else coalesce(${aiGenerationRuns.estimatedCostMicrousd}, 0) end), 0)::bigint`,
-      }).from(aiGenerationRuns).where(and(eq(aiGenerationRuns.ownerId, input.ownerId), gt(aiGenerationRuns.startedAt, monthStart)));
+      }).from(aiGenerationRuns).where(and(eq(aiGenerationRuns.ownerId, input.ownerId), gte(aiGenerationRuns.startedAt, monthStart)));
       const committed = Number(usage[0]?.total ?? 0);
       if (input.monthlyBudgetMicrousd <= 0 || committed + input.reservationMicrousd > input.monthlyBudgetMicrousd) {
         throw new AiGenerationError("budget_exhausted", "The configured monthly AI spending allowance is unavailable or exhausted.");
@@ -110,6 +110,23 @@ export class PostgresAiRunStore implements AiRunStore {
         .where(and(eq(aiGenerationRuns.id, input.runId), eq(aiGenerationRuns.ownerId, input.ownerId), eq(aiGenerationRuns.status, "running")));
     });
   }
+}
+
+export async function getAiMonthlyCommittedMicrousd(ownerId: string, now = new Date()): Promise<number> {
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const usage = await withDatabaseTransaction((db) => db.select({
+    total: sql<number>`coalesce(sum(case
+      when ${aiGenerationRuns.status} = 'running' and ${aiGenerationRuns.leaseExpiresAt} > ${now}
+        then ${aiGenerationRuns.reservedCostMicrousd}
+      when ${aiGenerationRuns.status} = 'succeeded'
+        then coalesce(${aiGenerationRuns.estimatedCostMicrousd}, 0)
+      else 0
+    end), 0)::bigint`,
+  }).from(aiGenerationRuns).where(and(
+    eq(aiGenerationRuns.ownerId, ownerId),
+    gte(aiGenerationRuns.startedAt, monthStart),
+  )));
+  return Number(usage[0]?.total ?? 0);
 }
 
 export async function listAiIdeaSuggestions(ownerId: string): Promise<readonly AiSuggestionView[]> {

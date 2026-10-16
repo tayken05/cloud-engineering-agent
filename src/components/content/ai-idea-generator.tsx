@@ -1,22 +1,17 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 import { CONTENT_FORMATS, type ContentFormatId } from "@/features/content-studio/content-formats";
 import { AUDIENCE_LEVELS, type AudienceLevel, type EvidenceOption } from "@/features/content-studio/content-types";
 import { AI_RESEARCH_PATHS, type AiIdeaRequest, type AiPublicStatus } from "@/features/ai-content/types";
+import { aiStatusLabel, aiStatusMessage } from "@/features/ai-content/status-copy";
 import { generateAiIdeasAction, reviewAiIdeaAction } from "@/server/ai/actions";
 import type { AiSuggestionView } from "@/server/ai/repository";
 
 function label(value: string): string {
   return value.replaceAll("_", " ").replace(/(^|\s)\S/g, (character) => character.toUpperCase());
-}
-
-function unavailableMessage(status: AiPublicStatus): string {
-  if (status.reason === "disabled") return "AI generation is disabled by server configuration. Manual creation remains available.";
-  if (status.reason === "zero_budget") return "AI generation has a zero monthly allowance and cannot make paid requests.";
-  if (status.reason === "missing_key") return "AI generation is enabled, but its server-only provider credential is missing.";
-  return "AI generation configuration is incomplete. No provider request can be made.";
 }
 
 export function AiIdeaGenerator({
@@ -28,6 +23,7 @@ export function AiIdeaGenerator({
   initialStatus: AiPublicStatus;
   initialSuggestions: readonly AiSuggestionView[];
 }) {
+  const router = useRouter();
   const [topic, setTopic] = useState("");
   const [objective, setObjective] = useState("");
   const [researchPath, setResearchPath] = useState<(typeof AI_RESEARCH_PATHS)[number]>("evergreen");
@@ -65,7 +61,11 @@ export function AiIdeaGenerator({
     setBusy(true); setFeedback(decision === "accept" ? "Accepting idea into the private library…" : "Recording editorial rejection…");
     try {
       const result = await reviewAiIdeaAction(id, decision, note);
-      if (result.ok && result.suggestions) { setSuggestions(result.suggestions); setFeedback(decision === "accept" ? "Idea accepted and saved as approved. Human fact review is still required." : "Proposal rejected and retained with its editorial decision."); }
+      if (result.ok && result.suggestions) {
+        setSuggestions(result.suggestions);
+        setFeedback(decision === "accept" ? "Idea accepted and saved as approved. Human fact review is still required." : "Proposal rejected and retained with its editorial decision.");
+        if (decision === "accept") router.refresh();
+      }
       else setFeedback(result.error ?? "The editorial decision failed.");
     } catch { setFeedback("The authenticated editorial request failed."); }
     finally { setBusy(false); }
@@ -75,9 +75,9 @@ export function AiIdeaGenerator({
     <section className="studio-panel ai-workspace-panel" aria-labelledby="ai-idea-heading">
       <div className="studio-panel-heading">
         <div><p className="eyebrow">AI content intelligence</p><h2 id="ai-idea-heading">Discover educational opportunities</h2></div>
-        <span className={initialStatus.available ? "status-chip status-safe" : "status-chip"}>{initialStatus.available ? initialStatus.model : "Disabled"}</span>
+        <span className={initialStatus.available ? "status-chip status-safe" : "status-chip"}>{aiStatusLabel(initialStatus)}</span>
       </div>
-      {!initialStatus.available ? <div className="studio-state"><strong>Paid generation is unavailable</strong><p>{unavailableMessage(initialStatus)}</p></div> : (
+      {!initialStatus.available ? <div className="studio-state"><strong>Paid generation is unavailable</strong><p>{aiStatusMessage(initialStatus)}</p></div> : (
         <form className="idea-form" onSubmit={generate}>
           <label>Research path<select value={researchPath} onChange={(event) => setResearchPath(event.target.value as typeof researchPath)}>{AI_RESEARCH_PATHS.map((value) => <option key={value} value={value}>{value === "news" ? "News and emerging developments" : "Evergreen education"}</option>)}</select></label>
           <label>Batch size<select value={batchSize} onChange={(event) => setBatchSize(Number(event.target.value))}><option value={3}>3 ideas</option><option value={4}>4 ideas</option><option value={5}>5 ideas</option></select></label>

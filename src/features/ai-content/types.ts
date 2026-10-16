@@ -119,7 +119,14 @@ export type AiPublicStatus = Readonly<{
   available: boolean;
   budgetConfigured: boolean;
   model: string;
-  reason: "available" | "disabled" | "missing_key" | "zero_budget" | "invalid_configuration";
+  reason:
+    | "available"
+    | "budget_exhausted"
+    | "disabled"
+    | "invalid_configuration"
+    | "missing_key"
+    | "status_unavailable"
+    | "zero_budget";
 }>;
 
 export type AiRunReservation = Readonly<{
