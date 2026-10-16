@@ -215,7 +215,7 @@ The runtime Cron uses pooled `DATABASE_URL`; operator migration and controlled m
 
 ## Current tooling limitations
 
-The production-only audit reports zero vulnerabilities, including current stable `fast-xml-parser` 5.11.2. Full audit has nine development package findings: five existing high findings from braces and four moderate findings through Drizzle Kit's legacy loader to esbuild 0.18.20. The latter advisory affects esbuild's HTTP serve feature, not offline schema generation; no serve/Studio command is used. Patched esbuild 0.25.0 is outside the legacy loader's declared `~0.18.20` range. Track a compatible upstream stable fix, without forced Kit downgrades or unsupported overrides.
+The production-only audit reports four moderate findings through the managed Neon Auth dependency chain to Drizzle Kit's legacy loader and esbuild 0.18.20. The full audit reports those four plus five high lint-tool findings through `eslint-config-next` to `braces`. The esbuild advisory affects its HTTP serve feature, not the application's runtime database or Auth requests; no Drizzle Studio/serve command is used. The offered fixes install incompatible breaking downgrades. Track compatible upstream fixes without forced downgrades or unsupported overrides.
 
 npm reported deprecated esbuild-kit loader packages and blocked three esbuild postinstall scripts. Generation/checks succeeded using installed native binaries; no extra script approval was needed. The built-in tests report Node's module-type detection warning for `.ts` ES-module imports in the existing mixed-module project. That warning remains visible; schema/application compilation is unchanged.
 
