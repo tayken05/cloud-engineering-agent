@@ -4,7 +4,7 @@ These instructions apply throughout this repository. Develop one explicitly assi
 
 ## Required development rules
 
-1. Read existing project documentation before making changes: `README.md`, `docs/MASTER-BLUEPRINT.md`, `docs/PROJECT-ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, and relevant local instructions.
+1. Before making changes, inspect the working tree and read only the task-relevant documentation sections. Use `docs/MASTER-BLUEPRINT.md` for product intent, `docs/CREATIVE-INTELLIGENCE-CHARTER.md` for creative and editorial behavior, `docs/DECISIONS.md` for established choices, and `docs/PROJECT-ROADMAP.md` for implementation status and sequencing; consult architecture and domain documents when the task touches them.
 2. Implement only the currently authorized task. Planned features and roadmap entries are not authorization to build them.
 3. Use clean, maintainable TypeScript.
 4. Avoid `any` unless clearly justified; record the reason when it is necessary.
@@ -30,6 +30,7 @@ These instructions apply throughout this repository. Develop one explicitly assi
 - Use npm exclusively. Keep `package-lock.json` committed and synchronized with `package.json`; use `npm ci` for reproducible installs.
 - Preserve strict TypeScript and the `@/*` → `src/*` import alias.
 - Update relevant documentation when authorized work changes scope or architecture. Distinguish implemented features from future plans.
+- For creative and editorial work, follow the Creative Intelligence Charter: preserve creative freedom and anti-repetition, prefer intuitive owner workflows, and treat examples as illustrations rather than fixed templates.
 - Preserve Style A (Historical-Evolutionary and First-Principles Teaching) and Style B (Real-World Analogy Explainers) as independent content categories.
 - Preserve the private Personal Tech Intelligence Hub and its wider-industry scope. Do not expose private data before appropriate server-side access control is implemented.
 - Preserve human-reviewed manual X publishing. AI-generated drafts and reply suggestions do not authorize public posting.

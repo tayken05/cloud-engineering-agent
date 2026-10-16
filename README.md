@@ -33,6 +33,7 @@ Development and production builds use Next.js's supported Webpack mode with Tail
 - `src/components/`: shared shell, navigation, appearance control, jobs, content workspaces, visual rendering, and page presentation components.
 - `src/lib/workspace.ts`: typed navigation and descriptive page catalog.
 - `docs/MASTER-BLUEPRINT.md`: all product requirements, independent teaching styles, private hub, and future technology direction.
+- `docs/CREATIVE-INTELLIGENCE-CHARTER.md`: permanent creative intelligence, editorial identity, and owner-experience guidance.
 - `docs/PROJECT-ROADMAP.md`: current foundation scope and planned later work.
 - `docs/ARCHITECTURE.md`: current structure and planned responsibility boundaries.
 - `docs/DECISIONS.md`: recorded decisions and their implementation status.
