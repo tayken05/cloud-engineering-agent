@@ -27,7 +27,7 @@ The OpenAI SDK is pinned at 7.34.0. The adapter uses the Responses API, `text.fo
 - [Models](https://developers.openai.com/api/docs/models)
 - [Pricing](https://developers.openai.com/api/docs/pricing)
 
-Model availability and pricing can change. Review those sources and update the configured rates before enabling a positive allowance.
+Model availability and pricing can change. Review those sources and update the configured rates before changing the approved allowance or model.
 
 OpenAI image generation uses the direct Images API with `gpt-image-2.5-flare`, one PNG at a time, low quality by default, and a 120-second bounded request. A second bounded Responses API request inspects the actual pixels before image-first copy is written. Square output is 1024 by 1024; landscape is 1536 by 1024. Generated and owner-provided PNGs are stored in private Vercel Blob storage, while PostgreSQL stores owner-scoped metadata and relationships only. Private authenticated handlers stream and download assets. Official references: [image generation](https://developers.openai.com/api/docs/guides/image-generation) and [Vercel private Blob storage](https://vercel.com/docs/vercel-blob/private-storage).
 
@@ -56,14 +56,8 @@ A request can proceed only when the authenticated user is the exact configured o
 
 The application allowance is not a provider billing ceiling. Provider project budgets and alerts should also be configured before activation.
 
-## Activation procedure
+## Current production controls
 
-Activation requires a separate explicit owner approval for a positive monthly amount and paid requests. Then:
+The owner-approved production allowance is `$2` per calendar month at the application layer. Text generation is enabled. Image generation is also enabled for deliberate owner actions at low quality, with a conservative `$0.03` reservation for one image plus inspection. The private Blob store is linked, but this follow-up made no real image request and the store remained empty after deployment.
 
-1. Create or select an OpenAI project with an appropriate provider-side budget and alerts.
-2. Create a restricted server credential and configure `OPENAI_API_KEY` only in the existing Vercel Production environment.
-3. Set `AI_GENERATION_ENABLED=true` and `AI_MONTHLY_BUDGET_USD` to the approved amount.
-4. Confirm `AI_TEXT_MODEL` and the input/output price variables against current official pricing.
-5. Redeploy the existing project and perform one owner-authenticated bounded request while observing the stored run and provider usage.
-
-Do not prefix these variables with `NEXT_PUBLIC_`. No activation is needed for manual authoring.
+Before increasing the allowance, changing model or quality, or running a first paid image request, review current provider pricing and the remaining application allowance. Keep provider-side budgets and alerts in place. Do not prefix any credential or control with `NEXT_PUBLIC_`.

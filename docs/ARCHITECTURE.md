@@ -133,7 +133,7 @@ Engagement: authorized X data where feasible → conversation hubs and Shared In
 
 Notifications: authorized application event → durable notification job → preference and consent checks → Telegram or Browser Push delivery → observable delivery result.
 
-The bounded collector now runs daily through a production-only, secret-authenticated Vercel Cron route. PostgreSQL records run outcomes and holds the recoverable concurrency lease; source-item constraints and transactional planning preserve idempotency. Owner-triggered AI generation is implemented but remains disabled until explicit budget activation. Evidence grouping/verification, publishing, engagement, and notification flows remain future work.
+The bounded collector now runs daily through a production-only, secret-authenticated Vercel Cron route. PostgreSQL records run outcomes and holds the recoverable concurrency lease; source-item constraints and transactional planning preserve idempotency. Owner-triggered AI generation uses the approved shared allowance, while automatic AI scheduling remains disabled. Evidence grouping/verification, publishing, engagement, and notification flows remain future work.
 
 ## Reliability and provenance
 
@@ -145,7 +145,7 @@ The bounded collector now runs daily through a production-only, secret-authentic
 
 ## Planned technology choices
 
-Neon PostgreSQL stores the applied schema, source catalog, collected publisher metadata, collection-run records, private content, and AI run/editorial metadata on both isolated development and production `main`. Drizzle implements schema, migrations, bounded reads, and transactional persistence. Vercel hosts the application and invokes the existing news and jobs collectors on their documented schedules. The OpenAI Responses API adapter is implemented server-side but disabled. Official X API access is conditional on feasibility. Other durable processing, Telegram Bot API, and Browser Push API remain future directions.
+Neon PostgreSQL stores the applied schema, source catalog, collected publisher metadata, collection-run records, private content, and AI run/editorial metadata on both isolated development and production `main`. Drizzle implements schema, migrations, bounded reads, and transactional persistence. Vercel hosts the application and invokes the existing news and jobs collectors on their documented schedules. OpenAI Responses and Images adapters are server-only and owner-triggered. Official X API access is conditional on feasibility. Other durable processing, Telegram Bot API, and Browser Push API remain future directions.
 
 ## Security and project separation
 
