@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 
+import type { AiPublicStatus } from "@/features/ai-content/types";
 import { CONTENT_FORMATS, getContentFormat, type ContentFormatId } from "@/features/content-studio/content-formats";
 import { PLANNED_IMAGE_PROVIDERS } from "@/features/content-studio/image-provider";
 import type { ContentDraft, ContentWorkspaceState, EvidenceOption } from "@/features/content-studio/content-types";
@@ -14,6 +15,7 @@ import {
 } from "@/features/content-studio/content-workspace";
 import { useContentWorkspace } from "./content-workspace-store";
 import { VisualCreator } from "./visual-creator";
+import { generateAiDraftAction } from "@/server/ai/actions";
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -56,11 +58,13 @@ function XPreview({ draft }: { draft: ContentDraft }) {
 }
 
 export function ContentStudioWorkspace({
+  aiStatus,
   evidenceOptions,
   evidenceUnavailable,
   initialDraftId,
   initialState,
 }: {
+  aiStatus: AiPublicStatus;
   evidenceOptions: readonly EvidenceOption[];
   evidenceUnavailable: boolean;
   initialDraftId?: string;
@@ -71,6 +75,8 @@ export function ContentStudioWorkspace({
   const [draftEdits, setDraftEdits] = useState<Readonly<Record<string, ContentDraft>>>({});
   const [feedback, setFeedback] = useState<string>("");
   const [reviewProblems, setReviewProblems] = useState<readonly string[]>([]);
+  const [aiAngle, setAiAngle] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
 
   const storedDraft = workspace.state?.drafts.find((draft) => draft.id === selectedId)
     ?? workspace.state?.drafts.find((draft) => draft.id === initialDraftId)
@@ -162,6 +168,36 @@ export function ContentStudioWorkspace({
     }
   }
 
+  async function generateWithAi() {
+    if (!editing || !aiStatus.available) return;
+    setAiBusy(true);
+    setFeedback("Generating a validated draft with the server-only AI provider…");
+    try {
+      const result = await generateAiDraftAction({
+        angle: aiAngle.trim(),
+        draftId: editing.id,
+        expectedVersion: editing.recordVersion,
+        idempotencyKey: `ai-draft:${crypto.randomUUID()}`,
+      });
+      if (!result.ok || !result.state) {
+        setFeedback(result.error ?? "AI drafting failed without changing the saved draft.");
+        return;
+      }
+      workspace.replaceState(result.state);
+      setDraftEdits((current) => {
+        const next: Record<string, ContentDraft> = { ...current };
+        delete next[editing.id];
+        return next;
+      });
+      setReviewProblems([]);
+      setFeedback("AI-assisted draft saved with a revision checkpoint. Review every technical claim before approval.");
+    } catch {
+      setFeedback("The authenticated AI drafting request failed without changing the saved draft.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   return (
     <div className="content-workspace">
       <aside className="operator-notice"><div><strong>Persistent private drafting</strong><p>Saves complete on the server before confirmation. Version checks prevent a second browser session from silently replacing a newer draft.</p></div><span className="status-chip status-safe">Human review required</span></aside>
@@ -178,6 +214,26 @@ export function ContentStudioWorkspace({
 
       {editing && format ? (
         <>
+          <section className="studio-panel ai-workspace-panel" aria-labelledby="ai-draft-heading">
+            <div className="studio-panel-heading">
+              <div><p className="eyebrow">AI drafting assistant</p><h2 id="ai-draft-heading">Develop this approved idea</h2></div>
+              <span className={aiStatus.available ? "status-chip status-safe" : "status-chip"}>{aiStatus.available ? aiStatus.model : "Disabled"}</span>
+            </div>
+            {aiStatus.available ? (
+              <div className="draft-fields">
+                <label className="wide-field">Different angle or writing direction
+                  <textarea rows={3} maxLength={600} value={aiAngle} onChange={(event) => setAiAngle(event.target.value)} placeholder="Optional: emphasize first principles, make the troubleshooting scenario harder, or use a more concise hook." />
+                </label>
+                <div className="studio-actions wide-field">
+                  <button className="primary-action" disabled={aiBusy || workspace.busy} type="button" onClick={generateWithAi}>{aiBusy ? "Generating securely…" : "Generate and save draft"}</button>
+                  <span className="field-note">The output is validated, saved as a new revision, and always requires human technical review.</span>
+                </div>
+              </div>
+            ) : (
+              <div className="studio-state"><strong>Paid generation is unavailable</strong><p>Generation remains disabled until a server-side API key, an explicit enable flag, and a positive owner-approved allowance are all configured.</p></div>
+            )}
+          </section>
+
           <form className="studio-panel draft-editor" onSubmit={save}>
             <div className="studio-panel-heading">
               <div><p className="eyebrow">Drafting workflow</p><h2>Write and review</h2></div>

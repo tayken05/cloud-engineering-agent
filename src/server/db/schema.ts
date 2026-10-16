@@ -87,6 +87,10 @@ export const contentVisualTemplate = pgEnum("content_visual_template", [
 ]);
 export const contentVisualAspect = pgEnum("content_visual_aspect", ["square", "landscape"]);
 export const contentVisualAccent = pgEnum("content_visual_accent", ["blue", "cyan", "violet", "amber"]);
+export const aiGenerationKind = pgEnum("ai_generation_kind", ["idea_batch", "draft"]);
+export const aiGenerationStatus = pgEnum("ai_generation_status", ["running", "succeeded", "failed"]);
+export const aiSuggestionStatus = pgEnum("ai_suggestion_status", ["proposed", "accepted", "rejected"]);
+export const aiVerificationStatus = pgEnum("ai_verification_status", ["evidence_backed", "needs_review"]);
 
 const auditColumns = () => ({
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -531,6 +535,83 @@ export const contentVisualSpecifications = pgTable("content_visual_specification
   check("content_visual_specifications_dimensions", sql`(${table.aspect} = 'square' AND ${table.width} = 1080 AND ${table.height} = 1080) OR (${table.aspect} = 'landscape' AND ${table.width} = 1600 AND ${table.height} = 900)`),
 ]);
 
+export const aiGenerationRuns = pgTable("ai_generation_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+  kind: aiGenerationKind("kind").notNull(),
+  provider: varchar("provider", { length: 64 }).notNull(),
+  model: varchar("model", { length: 128 }).notNull(),
+  providerResponseId: varchar("provider_response_id", { length: 128 }),
+  status: aiGenerationStatus("status").default("running").notNull(),
+  requestFingerprint: char("request_fingerprint", { length: 64 }).notNull(),
+  requestedCount: integer("requested_count").default(1).notNull(),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  reservedCostMicrousd: bigint("reserved_cost_microusd", { mode: "number" }).default(0).notNull(),
+  estimatedCostMicrousd: bigint("estimated_cost_microusd", { mode: "number" }),
+  errorCode: varchar("error_code", { length: 128 }),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }).notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  ...auditColumns(),
+}, (table) => [
+  unique("ai_generation_runs_owner_idempotency_unique").on(table.ownerId, table.idempotencyKey),
+  unique("ai_generation_runs_id_owner_unique").on(table.id, table.ownerId),
+  uniqueIndex("ai_generation_runs_single_running_owner_idx").on(table.ownerId).where(sql`${table.status} = 'running'`),
+  index("ai_generation_runs_owner_started_idx").on(table.ownerId, table.startedAt),
+  index("ai_generation_runs_owner_status_idx").on(table.ownerId, table.status, table.startedAt),
+  check("ai_generation_runs_owner_not_blank", sql`length(btrim(${table.ownerId})) > 0`),
+  check("ai_generation_runs_idempotency_not_blank", sql`length(btrim(${table.idempotencyKey})) > 0`),
+  check("ai_generation_runs_provider_not_blank", sql`length(btrim(${table.provider})) > 0`),
+  check("ai_generation_runs_model_not_blank", sql`length(btrim(${table.model})) > 0`),
+  check("ai_generation_runs_fingerprint_format", sql`${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
+  check("ai_generation_runs_requested_count", sql`${table.requestedCount} BETWEEN 1 AND 5`),
+  check("ai_generation_runs_token_counts", sql`(${table.inputTokens} IS NULL OR ${table.inputTokens} >= 0) AND (${table.outputTokens} IS NULL OR ${table.outputTokens} >= 0)`),
+  check("ai_generation_runs_costs_nonnegative", sql`${table.reservedCostMicrousd} >= 0 AND (${table.estimatedCostMicrousd} IS NULL OR ${table.estimatedCostMicrousd} >= 0)`),
+  check("ai_generation_runs_state", sql`
+    (${table.status} = 'running' AND ${table.finishedAt} IS NULL) OR
+    (${table.status} <> 'running' AND ${table.finishedAt} IS NOT NULL)
+  `),
+]);
+
+export const aiContentSuggestions = pgTable("ai_content_suggestions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: uuid("run_id").notNull(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  kind: aiGenerationKind("kind").notNull(),
+  ordinal: integer("ordinal").notNull(),
+  verificationStatus: aiVerificationStatus("verification_status").default("needs_review").notNull(),
+  payload: jsonb("payload").$type<Readonly<Record<string, unknown>>>().notNull(),
+  editorialStatus: aiSuggestionStatus("editorial_status").default("proposed").notNull(),
+  editorialFeedback: varchar("editorial_feedback", { length: 2000 }),
+  acceptedIdeaId: varchar("accepted_idea_id", { length: 128 }).references(() => contentIdeas.id, { onDelete: "restrict" }),
+  acceptedDraftId: varchar("accepted_draft_id", { length: 128 }).references(() => contentDrafts.id, { onDelete: "restrict" }),
+  ...auditColumns(),
+}, (table) => [
+  foreignKey({ name: "ai_content_suggestions_run_owner_fk", columns: [table.runId, table.ownerId], foreignColumns: [aiGenerationRuns.id, aiGenerationRuns.ownerId] }).onDelete("cascade"),
+  unique("ai_content_suggestions_run_ordinal_unique").on(table.runId, table.ordinal),
+  index("ai_content_suggestions_owner_editorial_idx").on(table.ownerId, table.editorialStatus, table.createdAt),
+  check("ai_content_suggestions_ordinal_nonnegative", sql`${table.ordinal} >= 0 AND ${table.ordinal} < 5`),
+  check("ai_content_suggestions_payload_object", sql`jsonb_typeof(${table.payload}) = 'object'`),
+  check("ai_content_suggestions_acceptance", sql`
+    (${table.editorialStatus} <> 'accepted' AND ${table.acceptedIdeaId} IS NULL AND ${table.acceptedDraftId} IS NULL) OR
+    (${table.editorialStatus} = 'accepted' AND num_nonnulls(${table.acceptedIdeaId}, ${table.acceptedDraftId}) = 1)
+  `),
+]);
+
+export const aiGenerationEvidence = pgTable("ai_generation_evidence", {
+  runId: uuid("run_id").notNull(),
+  ownerId: varchar("owner_id", { length: 128 }).notNull(),
+  sourceItemId: uuid("source_item_id").notNull().references(() => sourceItems.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ name: "ai_generation_evidence_pk", columns: [table.runId, table.sourceItemId] }),
+  foreignKey({ name: "ai_generation_evidence_run_owner_fk", columns: [table.runId, table.ownerId], foreignColumns: [aiGenerationRuns.id, aiGenerationRuns.ownerId] }).onDelete("cascade"),
+  index("ai_generation_evidence_source_idx").on(table.sourceItemId),
+  index("ai_generation_evidence_owner_run_idx").on(table.ownerId, table.runId),
+]);
+
 export const sourcesRelations = relations(sources, ({ many }) => ({ items: many(sourceItems) }));
 export const sourceItemsRelations = relations(sourceItems, ({ one, many }) => ({
   source: one(sources, { fields: [sourceItems.sourceId], references: [sources.id] }),
@@ -558,6 +639,18 @@ export const contentDraftsRelations = relations(contentDrafts, ({ one, many }) =
   idea: one(contentIdeas, { fields: [contentDrafts.ideaId], references: [contentIdeas.id] }),
   evidence: many(contentDraftSourceItems), revisions: many(contentDraftRevisions), visual: one(contentVisualSpecifications),
 }));
+export const aiGenerationRunsRelations = relations(aiGenerationRuns, ({ many }) => ({
+  evidence: many(aiGenerationEvidence), suggestions: many(aiContentSuggestions),
+}));
+export const aiContentSuggestionsRelations = relations(aiContentSuggestions, ({ one }) => ({
+  run: one(aiGenerationRuns, { fields: [aiContentSuggestions.runId], references: [aiGenerationRuns.id] }),
+  acceptedIdea: one(contentIdeas, { fields: [aiContentSuggestions.acceptedIdeaId], references: [contentIdeas.id] }),
+  acceptedDraft: one(contentDrafts, { fields: [aiContentSuggestions.acceptedDraftId], references: [contentDrafts.id] }),
+}));
+export const aiGenerationEvidenceRelations = relations(aiGenerationEvidence, ({ one }) => ({
+  run: one(aiGenerationRuns, { fields: [aiGenerationEvidence.runId], references: [aiGenerationRuns.id] }),
+  sourceItem: one(sourceItems, { fields: [aiGenerationEvidence.sourceItemId], references: [sourceItems.id] }),
+}));
 
 export type Source = typeof sources.$inferSelect;
 export type NewSource = typeof sources.$inferInsert;
@@ -581,3 +674,5 @@ export type ContentIdeaRow = typeof contentIdeas.$inferSelect;
 export type NewContentIdeaRow = typeof contentIdeas.$inferInsert;
 export type ContentDraftRow = typeof contentDrafts.$inferSelect;
 export type NewContentDraftRow = typeof contentDrafts.$inferInsert;
+export type AiGenerationRunRow = typeof aiGenerationRuns.$inferSelect;
+export type AiContentSuggestionRow = typeof aiContentSuggestions.$inferSelect;

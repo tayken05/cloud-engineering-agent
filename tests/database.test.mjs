@@ -16,6 +16,9 @@ import {
   contentDrafts,
   contentIdeas,
   contentVisualSpecifications,
+  aiContentSuggestions,
+  aiGenerationEvidence,
+  aiGenerationRuns,
   jobEmployers,
   jobDiscoveryRuns,
   jobs,
@@ -117,6 +120,7 @@ test("migration history contains only reviewed additive schema entries", async (
     "0002_jobs_opportunities",
     "0003_job_discovery",
     "0004_content_workspace",
+    "0005_ai_content_generation",
   ]);
   for (const entry of journal.entries) {
     const migration = await readFile(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8");
@@ -182,10 +186,31 @@ test("the job-discovery migration matches fresh offline generation", async () =>
 
 test("the content workspace migration matches fresh offline generation", async () => {
   const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0003_snapshot.json", import.meta.url), "utf8"));
-  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const contentSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0004_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, contentSnapshot);
   const migration = await readFile(new URL("../drizzle/0004_content_workspace.sql", import.meta.url), "utf8");
   const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
   assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the AI-content migration matches fresh offline generation", async () => {
+  const previousSnapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0004_snapshot.json", import.meta.url), "utf8"));
+  const generated = await generateMigration(previousSnapshot, generateDrizzleJson(schema));
+  const migration = await readFile(new URL("../drizzle/0005_ai_content_generation.sql", import.meta.url), "utf8");
+  const existing = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
+  assert.deepEqual(existing, generated.map((statement) => statement.trim()));
+});
+
+test("the AI-content snapshot matches owner-scoped run, suggestion, and evidence declarations", async () => {
+  const snapshot = JSON.parse(await readFile(new URL("../drizzle/meta/0005_snapshot.json", import.meta.url), "utf8"));
+  for (const table of [aiGenerationRuns, aiContentSuggestions, aiGenerationEvidence]) {
+    const declared = getTableConfig(table);
+    const stored = snapshot.tables[`public.${declared.name}`];
+    assert.ok(stored);
+    assert.deepEqual(Object.keys(stored.columns).sort(), declared.columns.map((column) => column.name).sort());
+    assert.deepEqual(Object.keys(stored.indexes).sort(), declared.indexes.map((index) => index.config.name).sort());
+    assert.deepEqual(Object.keys(stored.checkConstraints).sort(), declared.checks.map((check) => check.name).sort());
+  }
 });
 
 test("the content snapshot matches owner-scoped declarations", async () => {

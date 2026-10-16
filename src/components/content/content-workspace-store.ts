@@ -60,5 +60,10 @@ export function useContentWorkspace(initialState: ContentWorkspaceState) {
     link.href = url; link.download = `cloud-agent-browser-workspace-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(url);
   }, [legacyState]);
 
-  return { busy, createDraft, createDraftFromIdea, exportLegacy, importLegacy, legacyState, restoreRevision, saveDraft, saveIdea, state, storageError, updateIdeaStatus } as const;
+  const replaceState = useCallback((nextState: ContentWorkspaceState) => {
+    setState(nextState);
+    setStorageError(null);
+  }, []);
+
+  return { busy, createDraft, createDraftFromIdea, exportLegacy, importLegacy, legacyState, replaceState, restoreRevision, saveDraft, saveIdea, state, storageError, updateIdeaStatus } as const;
 }

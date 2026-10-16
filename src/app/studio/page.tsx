@@ -9,6 +9,7 @@ import { getSection } from "@/lib/workspace";
 import { listContentEvidence } from "@/server/content/list-content-evidence";
 import { requireOwnerPage } from "@/server/auth/owner";
 import { loadContentWorkspace } from "@/server/content/workspace-repository";
+import { getAiPublicStatus } from "@/server/ai/config";
 
 export const metadata: Metadata = { title: `${getSection("/studio").title} | Cloud Engineering Agent` };
 
@@ -20,21 +21,20 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
   const initialDraftId = typeof draftParam === "string" && /^draft-[0-9a-f-]{36}$|^starter-draft-[a-z0-9-]+$/.test(draftParam)
     ? draftParam.slice(0, 128)
     : undefined;
-  let evidenceOptions: readonly EvidenceOption[] = [];
-  let evidenceUnavailable = false;
-  try {
-    evidenceOptions = [...await listContentEvidence()];
-  } catch {
-    evidenceUnavailable = true;
-    console.error("[content-studio] Optional publisher evidence could not be loaded.");
-  }
-  const initialState = await loadContentWorkspace(ownerId);
+  const [evidenceResult, initialState] = await Promise.all([
+    listContentEvidence().then((value) => ({ options: [...value] as readonly EvidenceOption[], unavailable: false })).catch(() => {
+      console.error("[content-studio] Optional publisher evidence could not be loaded.");
+      return { options: [] as readonly EvidenceOption[], unavailable: true };
+    }),
+    loadContentWorkspace(ownerId),
+  ]);
   return (
     <PageLayout title={section.title} description={section.description} eyebrow={section.group}>
       <OwnerSessionBar />
       <ContentStudioWorkspace
-        evidenceOptions={evidenceOptions}
-        evidenceUnavailable={evidenceUnavailable}
+        aiStatus={getAiPublicStatus()}
+        evidenceOptions={evidenceResult.options}
+        evidenceUnavailable={evidenceResult.unavailable}
         initialDraftId={initialDraftId}
         initialState={initialState}
       />

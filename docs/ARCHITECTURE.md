@@ -1,6 +1,6 @@
 # Architecture
 
-Status: the deployed application includes the responsive shell, 12-source daily news collector, a public Jobs & Opportunities Hub with daily employer-board discovery, and an owner-authenticated PostgreSQL-backed Educational Content Studio. Final owner enrollment is pending; story grouping, publishing, and engagement workflows remain planned.
+Status: the deployed application includes the responsive shell, 12-source daily news collector, a public Jobs & Opportunities Hub with daily employer-board discovery, an owner-authenticated PostgreSQL-backed Educational Content Studio, and a disabled-by-default AI idea/draft engine. Final owner enrollment is pending; story grouping, publishing, and engagement workflows remain planned.
 
 ## Current application
 
@@ -133,7 +133,7 @@ Engagement: authorized X data where feasible → conversation hubs and Shared In
 
 Notifications: authorized application event → durable notification job → preference and consent checks → Telegram or Browser Push delivery → observable delivery result.
 
-The bounded collector now runs daily through a production-only, secret-authenticated Vercel Cron route. PostgreSQL records run outcomes and holds the recoverable concurrency lease; source-item constraints and transactional planning preserve idempotency. Evidence grouping/verification, AI generation, publishing, engagement, and notification flows remain proposals.
+The bounded collector now runs daily through a production-only, secret-authenticated Vercel Cron route. PostgreSQL records run outcomes and holds the recoverable concurrency lease; source-item constraints and transactional planning preserve idempotency. Owner-triggered AI generation is implemented but remains disabled until explicit budget activation. Evidence grouping/verification, publishing, engagement, and notification flows remain future work.
 
 ## Reliability and provenance
 
@@ -145,7 +145,7 @@ The bounded collector now runs daily through a production-only, secret-authentic
 
 ## Planned technology choices
 
-Neon PostgreSQL stores the applied schema, source catalog, collected publisher metadata, and collection-run records on both isolated development and production `main`. Drizzle implements schema, migrations, bounded reads, and transactional scheduled persistence. Vercel hosts the application and invokes the collector once daily at `0 6 * * *` UTC. OpenAI API is the AI direction. Official X API access is conditional on feasibility. Other durable processing, Telegram Bot API, and Browser Push API remain future directions.
+Neon PostgreSQL stores the applied schema, source catalog, collected publisher metadata, collection-run records, private content, and AI run/editorial metadata on both isolated development and production `main`. Drizzle implements schema, migrations, bounded reads, and transactional persistence. Vercel hosts the application and invokes the existing news and jobs collectors on their documented schedules. The OpenAI Responses API adapter is implemented server-side but disabled. Official X API access is conditional on feasibility. Other durable processing, Telegram Bot API, and Browser Push API remain future directions.
 
 ## Security and project separation
 
@@ -165,3 +165,13 @@ Run `npm run lint`, `npm run typecheck`, and `npm run build` after changes. Conf
 Content persistence lives in `src/server/content/workspace-repository.ts`. Its transaction-scoped reads and writes always include the owner ID. Ideas and drafts use record versions for optimistic concurrency; draft changes preserve the prior state as a revision before updating. The six visual templates store compact editable specifications and continue to render/export PNGs in the browser. No binary media is stored in PostgreSQL or Vercel's temporary filesystem.
 
 The browser migration reads only the existing versioned Task 11 storage key, applies its bounded parser, reports available records, offers a JSON backup, and imports only after explicit confirmation. Stable IDs make repeats idempotent. Existing database IDs are skipped and browser data remains untouched. Cross-device synchronization uses request-time PostgreSQL retrieval after authentication; server confirmation precedes save success.
+
+## Task 13: AI content intelligence and drafting
+
+`src/features/ai-content/` owns provider-neutral contracts, structured-output schemas, prompt construction, validation, duplicate checks, X limits, evidence classification, and visual-specification allowlists. The 20-format registry remains the single source of format definitions. Historical/first-principles and real-world analogy prompts have independent requirements.
+
+`src/server/ai/` is the server-only boundary. OpenAI SDK 7.34.0 uses the Responses API with strict JSON Schema output, `store: false`, a 45-second default timeout, at most one retry, and cancellation. Server Actions authenticate the session, enforce the exact owner ID, validate input, and write accepted ideas or revision-preserving drafts through existing content repositories. No unauthenticated route or scheduled generation entry point exists.
+
+`ai_generation_runs` records idempotency, provider/model, status, leases, token usage, conservative cost reservations, final estimates, and safe error codes. `ai_content_suggestions` retains proposed/accepted/rejected structured outputs and feedback. `ai_generation_evidence` records exact source-item provenance. A PostgreSQL advisory transaction lock and one-running-run index serialize reservations per owner; expired leases recover. This application allowance reduces accidental spend but is not a provider billing ceiling.
+
+The configurable default model is `gpt-6-luna`, selected for bounded cost-sensitive text work. Model and price inputs must be reviewed against current official documentation before activation. Production has no positive allowance or AI key configured, so the UI reports generation unavailable and the provider cannot be called. Details are in `docs/AI-CONTENT.md`.

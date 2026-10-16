@@ -267,6 +267,10 @@ h3 { font-size: 16px; font-weight: 700; line-height: 1.5; letter-spacing: -.02em
 .idea-metadata dd { margin: 0; font-size: 11px; }
 .idea-card .studio-actions { margin-top: auto; }
 .studio-state { border: 1px dashed var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); padding: 28px; text-align: center; }
+.ai-workspace-panel { border-color: color-mix(in srgb, var(--accent) 34%, var(--border)); background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface) 62%); }
+.ai-suggestion-grid { margin-top: 20px; padding: 0; list-style: none; }
+.ai-evidence-list { display: grid; gap: 7px; margin: 14px 0; padding-left: 20px; color: var(--muted); font-size: .86rem; }
+.ai-evidence-list a { color: var(--accent-strong); overflow-wrap: anywhere; }
 .draft-toolbar { display: flex; align-items: flex-end; gap: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 16px; }
 .draft-toolbar label { flex: 1; }
 .format-guide { border-left: 3px solid var(--accent); background: var(--accent-bg); padding: 15px 17px; margin-bottom: 20px; }

@@ -1,14 +1,14 @@
 # Educational Content Studio
 
-Status: Task 11 implements a device-local Content Ideas workspace, drafting studio, X presentation preview, and deterministic PNG visual creator. No AI provider, X account, publishing endpoint, durable asset store, or private server mutation is connected.
+Status: Tasks 11–13 implement an owner-authenticated, PostgreSQL-backed Content Ideas workspace, drafting studio, X presentation preview, deterministic PNG visual creator, and a disabled-by-default AI idea/draft engine. No X account, publishing endpoint, paid image generator, or durable asset store is connected.
 
 ## Security boundary
 
-The application contains provider-managed `neon_auth` database objects but no implemented application session, owner identity, or server-side authorization policy. Task 11 therefore does not place unpublished content behind a cosmetic public-route check and does not expose a mutation endpoint.
+Managed Neon Auth provides the application session. `/ideas`, `/studio`, every content query, and every mutation require that session and an exact `OWNER_AUTH_USER_ID` match. Public registration is disabled, private routes are dynamically rendered, and the query layer scopes every record by owner ID.
 
-Ideas, drafts, revision checkpoints, moderator notes, evidence references, and visual specifications are stored under the versioned browser key `cloud-agent-content-workspace-v1`. Every restored value is validated, text and collection sizes are bounded, evidence URLs must use HTTPS, and the complete serialized workspace is limited to 1 MB. The data remains specific to that browser profile and can be cleared with browser storage. This is an operator workflow for the current release, not account-backed synchronization or backup.
+Ideas, drafts, revision checkpoints, moderator notes, evidence references, and visual specifications are stored in owner-scoped PostgreSQL tables. Record versions reject silent concurrent overwrites, and a prior revision is retained when draft content changes. The legacy versioned browser key `cloud-agent-content-workspace-v1` remains readable only for previewed, explicit, idempotent owner import and backup; successful import does not delete it.
 
-The server performs one read-only query for up to 40 recent collected source items. Browser code receives only the item identifier, publisher name, title, original HTTPS URL, and publication timestamp. A publisher record is labelled as supporting context rather than independent verification. Database failure leaves evergreen authoring available with an honest evidence-unavailable state.
+The server performs one read-only query for up to 40 recent collected source items. Browser code receives only the item identifier, publisher name, title, original HTTPS URL, and publication timestamp. A publisher record is labelled as supporting context rather than independent verification. Database failure produces an honest error state.
 
 ## Twenty selectable formats
 
@@ -60,7 +60,15 @@ The browser renders six reusable templates:
 
 Each template supports square `1080 × 1080` and landscape `1600 × 900` PNG output, four restrained accent palettes, editable labels, a title, subtitle, card copy, and branded footer. The live SVG preview and Canvas PNG renderer use the same compact specification. The browser generates PNG bytes only when the operator downloads an image. PostgreSQL stores no base64 payload, and the application does not write to Vercel's temporary filesystem.
 
-The specification is attached to its draft in local storage. The downloaded image remains the operator's responsibility until durable asset storage is separately selected and configured.
+The specification is attached to its owner-scoped draft in PostgreSQL. The downloaded image remains the operator's responsibility until durable asset storage is separately selected and configured.
+
+## AI ideas and text drafts
+
+The Ideas workspace can request a bounded 3–5 proposal batch from either recent publisher evidence or an evergreen educational path. Saved ideas and drafts are supplied as duplicate-avoidance subjects. Each result includes a title, subject, format, audience, objective, angle, evidence IDs, verification state, presentation recommendation, and optional safe visual specification. Proposals remain separate from approved content until the owner accepts or rejects them.
+
+The Studio can generate or revise one saved draft with its selected format and optional angle. Validated output is saved through the existing optimistic-concurrency path and adds a revision checkpoint. Source-backed facts, interpretations, and hypothetical examples remain classified. Needs Review flags identify missing evidence, unsafe commands, historical uncertainty, incomplete analogies, and formatting problems.
+
+OpenAI integration is server-only and uses strict Responses API structured output. It is unavailable unless an exact owner session, enable flag, server key, and positive monthly allowance all exist. The default production state is disabled with a zero allowance; Task 13 used mocked provider output and made no paid request. See `docs/AI-CONTENT.md`.
 
 ## Future AI image-provider boundary
 

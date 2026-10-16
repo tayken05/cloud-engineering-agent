@@ -1,0 +1,189 @@
+import "server-only";
+
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+
+import { AiGenerationError, type AiIdeaSuggestion, type AiRunStore, type AiVerificationStatus } from "@/features/ai-content/types";
+import {
+  aiContentSuggestions,
+  aiGenerationEvidence,
+  aiGenerationRuns,
+  contentDrafts,
+  contentIdeas,
+  sourceItems,
+  sources,
+} from "@/server/db/schema";
+import { withDatabaseTransaction } from "@/server/db/transaction";
+
+const RUN_LEASE_MS = 120_000;
+
+export type AiSuggestionView = Readonly<{
+  createdAt: string;
+  editorialFeedback: string | null;
+  editorialStatus: "proposed" | "accepted" | "rejected";
+  id: string;
+  payload: AiIdeaSuggestion;
+  verificationStatus: AiVerificationStatus;
+}>;
+
+export class PostgresAiRunStore implements AiRunStore {
+  async begin(input: Parameters<AiRunStore["begin"]>[0]) {
+    return withDatabaseTransaction(async (tx) => {
+      const now = new Date();
+      await tx.update(aiGenerationRuns).set({
+        errorCode: "lease_expired",
+        finishedAt: now,
+        reservedCostMicrousd: 0,
+        status: "failed",
+        updatedAt: now,
+      }).where(and(
+        eq(aiGenerationRuns.ownerId, input.ownerId),
+        eq(aiGenerationRuns.status, "running"),
+        sql`${aiGenerationRuns.leaseExpiresAt} <= ${now}`,
+      ));
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`ai-generation:${input.ownerId}`}))`);
+      const existing = await tx.select({ fingerprint: aiGenerationRuns.requestFingerprint, id: aiGenerationRuns.id })
+        .from(aiGenerationRuns)
+        .where(and(eq(aiGenerationRuns.ownerId, input.ownerId), eq(aiGenerationRuns.idempotencyKey, input.idempotencyKey)))
+        .limit(1);
+      if (existing[0]) {
+        if (existing[0].fingerprint !== input.fingerprint) throw new AiGenerationError("invalid_request", "The idempotency key was already used for a different request.");
+        return { duplicate: true, runId: existing[0].id };
+      }
+      const active = await tx.select({ id: aiGenerationRuns.id }).from(aiGenerationRuns)
+        .where(and(eq(aiGenerationRuns.ownerId, input.ownerId), eq(aiGenerationRuns.status, "running"))).limit(1);
+      if (active[0]) throw new AiGenerationError("already_running", "Another AI generation request is already running.");
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const usage = await tx.select({
+        total: sql<number>`coalesce(sum(case when ${aiGenerationRuns.status} = 'running' then ${aiGenerationRuns.reservedCostMicrousd} else coalesce(${aiGenerationRuns.estimatedCostMicrousd}, 0) end), 0)::bigint`,
+      }).from(aiGenerationRuns).where(and(eq(aiGenerationRuns.ownerId, input.ownerId), gt(aiGenerationRuns.startedAt, monthStart)));
+      const committed = Number(usage[0]?.total ?? 0);
+      if (input.monthlyBudgetMicrousd <= 0 || committed + input.reservationMicrousd > input.monthlyBudgetMicrousd) {
+        throw new AiGenerationError("budget_exhausted", "The configured monthly AI spending allowance is unavailable or exhausted.");
+      }
+      const inserted = await tx.insert(aiGenerationRuns).values({
+        idempotencyKey: input.idempotencyKey,
+        kind: input.kind,
+        leaseExpiresAt: new Date(now.getTime() + RUN_LEASE_MS),
+        model: input.model,
+        ownerId: input.ownerId,
+        provider: input.provider,
+        requestFingerprint: input.fingerprint,
+        requestedCount: input.requestedCount,
+        reservedCostMicrousd: input.reservationMicrousd,
+      }).returning({ id: aiGenerationRuns.id });
+      const runId = inserted[0]?.id;
+      if (!runId) throw new AiGenerationError("provider_failure", "The AI generation run could not be reserved.");
+      if (input.evidenceIds.length > 0) await tx.insert(aiGenerationEvidence).values([...new Set(input.evidenceIds)].map((sourceItemId) => ({ ownerId: input.ownerId, runId, sourceItemId })));
+      return { duplicate: false, runId };
+    });
+  }
+
+  async complete(input: Parameters<AiRunStore["complete"]>[0]) {
+    await withDatabaseTransaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.update(aiGenerationRuns).set({
+        estimatedCostMicrousd: input.estimatedCostMicrousd,
+        finishedAt: now,
+        inputTokens: input.inputTokens,
+        outputTokens: input.outputTokens,
+        providerResponseId: input.responseId,
+        reservedCostMicrousd: 0,
+        status: "succeeded",
+        updatedAt: now,
+      }).where(and(eq(aiGenerationRuns.id, input.runId), eq(aiGenerationRuns.ownerId, input.ownerId), eq(aiGenerationRuns.status, "running"))).returning({ id: aiGenerationRuns.id });
+      if (!updated[0]) throw new AiGenerationError("provider_failure", "The AI generation run could not be completed safely.");
+      if (input.suggestions.length > 0) await tx.insert(aiContentSuggestions).values(input.suggestions.map((suggestion, ordinal) => ({
+        kind: suggestion.kind,
+        ordinal,
+        ownerId: input.ownerId,
+        payload: suggestion.payload,
+        runId: input.runId,
+        verificationStatus: suggestion.verificationStatus,
+      })));
+    });
+  }
+
+  async fail(input: Parameters<AiRunStore["fail"]>[0]) {
+    await withDatabaseTransaction(async (tx) => {
+      const now = new Date();
+      await tx.update(aiGenerationRuns).set({ errorCode: input.errorCode.slice(0, 128), finishedAt: now, reservedCostMicrousd: 0, status: "failed", updatedAt: now })
+        .where(and(eq(aiGenerationRuns.id, input.runId), eq(aiGenerationRuns.ownerId, input.ownerId), eq(aiGenerationRuns.status, "running")));
+    });
+  }
+}
+
+export async function listAiIdeaSuggestions(ownerId: string): Promise<readonly AiSuggestionView[]> {
+  const rows = await withDatabaseTransaction((db) => db.select({
+    createdAt: aiContentSuggestions.createdAt,
+    editorialFeedback: aiContentSuggestions.editorialFeedback,
+    editorialStatus: aiContentSuggestions.editorialStatus,
+    id: aiContentSuggestions.id,
+    payload: aiContentSuggestions.payload,
+    verificationStatus: aiContentSuggestions.verificationStatus,
+  }).from(aiContentSuggestions).where(and(eq(aiContentSuggestions.ownerId, ownerId), eq(aiContentSuggestions.kind, "idea_batch"))).orderBy(desc(aiContentSuggestions.createdAt)).limit(50));
+  return rows.flatMap((row) => {
+    const payload = row.payload as unknown as AiIdeaSuggestion;
+    return payload && typeof payload.title === "string" ? [{ ...row, createdAt: row.createdAt.toISOString(), payload }] : [];
+  });
+}
+
+export async function getAiSuggestion(ownerId: string, suggestionId: string) {
+  const rows = await withDatabaseTransaction((db) => db.select().from(aiContentSuggestions)
+    .where(and(eq(aiContentSuggestions.id, suggestionId), eq(aiContentSuggestions.ownerId, ownerId))).limit(1));
+  return rows[0] ?? null;
+}
+
+export async function getAiRunSuggestion(ownerId: string, runId: string) {
+  const rows = await withDatabaseTransaction((db) => db.select().from(aiContentSuggestions)
+    .where(and(eq(aiContentSuggestions.runId, runId), eq(aiContentSuggestions.ownerId, ownerId))).orderBy(aiContentSuggestions.ordinal).limit(1));
+  return rows[0] ?? null;
+}
+
+export async function setAiSuggestionDecision(input: Readonly<{
+  acceptedDraftId?: string;
+  acceptedIdeaId?: string;
+  feedback?: string;
+  ownerId: string;
+  status: "accepted" | "rejected";
+  suggestionId: string;
+}>): Promise<void> {
+  await withDatabaseTransaction(async (tx) => {
+    const updated = await tx.update(aiContentSuggestions).set({
+      acceptedDraftId: input.acceptedDraftId ?? null,
+      acceptedIdeaId: input.acceptedIdeaId ?? null,
+      editorialFeedback: input.feedback?.trim().slice(0, 2000) || null,
+      editorialStatus: input.status,
+      updatedAt: new Date(),
+    }).where(and(eq(aiContentSuggestions.id, input.suggestionId), eq(aiContentSuggestions.ownerId, input.ownerId), eq(aiContentSuggestions.editorialStatus, "proposed"))).returning({ id: aiContentSuggestions.id });
+    if (!updated[0]) throw new Error("The suggestion is unavailable or was already reviewed.");
+  });
+}
+
+export async function listExistingContentSubjects(ownerId: string): Promise<readonly string[]> {
+  return withDatabaseTransaction(async (db) => {
+    const ideas = await db.select({ value: contentIdeas.subject }).from(contentIdeas).where(eq(contentIdeas.ownerId, ownerId)).limit(100);
+    const drafts = await db.select({ value: contentDrafts.title }).from(contentDrafts).where(eq(contentDrafts.ownerId, ownerId)).limit(100);
+    return [...ideas, ...drafts].map((item) => item.value).filter(Boolean);
+  });
+}
+
+export async function listAiEvidence(options: Readonly<{ ids?: readonly string[]; limit?: number }> = {}) {
+  const limit = Math.min(20, Math.max(1, options.limit ?? 20));
+  if (options.ids && options.ids.length === 0) return [];
+  return withDatabaseTransaction(async (db) => {
+    const query = db.select({
+      id: sourceItems.id,
+      primaryTopic: sourceItems.primaryTopic,
+      publishedAt: sourceItems.publishedAt,
+      publisher: sources.name,
+      summary: sourceItems.summary,
+      title: sourceItems.title,
+      url: sourceItems.originalUrl,
+      verificationStatus: sourceItems.verificationStatus,
+    }).from(sourceItems).innerJoin(sources, eq(sourceItems.sourceId, sources.id));
+    const rows = options.ids
+      ? await query.where(inArray(sourceItems.id, [...new Set(options.ids)])).orderBy(desc(sourceItems.publishedAt)).limit(limit)
+      : await query.orderBy(desc(sourceItems.publishedAt), desc(sourceItems.collectedAt)).limit(limit);
+    return rows.map((row) => ({ ...row, publishedAt: row.publishedAt?.toISOString() ?? null }));
+  });
+}

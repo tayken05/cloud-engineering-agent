@@ -1,6 +1,6 @@
 # Cloud Engineering Intelligence and X Content Platform
 
-Status: the deployed platform includes the intelligence schema, 12-source daily news collector, a public database-backed Jobs & Opportunities Hub, and an owner-authenticated persistent Educational Content Studio. Task 10 continuously verifies relevant vacancies across seven official employer boards. Tasks 11–12 preserve all 20 content formats, deterministic visual creation, revision history, and cross-device storage without AI billing or X publishing. Final owner enrollment, verified-talent workflows, AI-assisted generation, and X integrations remain planned.
+Status: the deployed platform includes the intelligence schema, 12-source daily news collector, a public database-backed Jobs & Opportunities Hub, and an owner-authenticated persistent Educational Content Studio. Task 10 continuously verifies relevant vacancies across seven official employer boards. Tasks 11–13 preserve all 20 content formats, deterministic visual creation, revision history, cross-device storage, and a provider-neutral AI idea/draft engine. Paid generation remains disabled with a zero allowance; final owner enrollment, verified-talent workflows, and X integrations remain planned.
 Recorded: 2026-10-15.
 
 ## Vision and boundaries
@@ -95,9 +95,9 @@ Planned information requirements:
 
 ## Planned product capabilities
 
-The Jobs & Opportunities Hub presents verified official listings and directs applicants to employer websites. The device-local Content Studio now supports ideas, drafts, revisions, X previews, and deterministic PNG visuals. The following capabilities remain planned:
+The Jobs & Opportunities Hub presents verified official listings and directs applicants to employer websites. The private persistent Content Studio supports ideas, drafts, revisions, X previews, deterministic PNG visuals, and disabled-by-default AI-assisted idea/draft workflows. The following capabilities remain planned:
 
-- AI-generated drafts.
+- Production AI generation after explicit budget approval and provider credential configuration.
 - Human-reviewed manual X publishing.
 - Published post tracking.
 - Conversation hubs and a Shared Inbox.
@@ -120,7 +120,7 @@ Integration direction and current status:
 | --- | --- |
 | Neon PostgreSQL | Intelligence schema, source catalog, publisher items, and durable collection-run monitoring on isolated development and production |
 | Drizzle ORM | Reviewed migrations, bounded Sources/Stories reads, idempotent source-item persistence, and atomic collection leases |
-| OpenAI API | Research assistance, draft generation, and reply suggestions |
+| OpenAI Responses API | Server-only structured idea and draft generation is implemented but disabled; later activation requires an explicit positive allowance and credential |
 | Vercel | Shell hosting implemented in Task 3B; future releases require task authorization |
 | Official X API where feasible | Approved tracking and engagement capabilities |
 | Scheduled and durable background processing | Daily Vercel Cron ingestion is implemented; digests and other asynchronous work remain planned |
@@ -135,3 +135,9 @@ Initialize the official scaffold, permanent engineering rules, documentation, ru
 ## Implemented private content foundation (Task 12)
 
 The Content Ideas and Content Studio workspaces now use managed Neon Auth, exact owner allowlisting, PostgreSQL persistence, revision history, optimistic concurrency, persistent visual specifications, and an explicit browser-data import. Public information routes remain available. The 20 educational formats and the independent first-principles and real-world-analogy teaching styles remain unchanged. The existing console-created owner can establish a first password through managed recovery and verify email with the shared provider's six-digit code; public registration remains disabled and recovery never grants access to a user whose stable ID is not allowlisted.
+
+## Implemented AI content foundation (Task 13)
+
+The owner-only Ideas and Studio routes now contain a modular OpenAI Responses API integration with strict structured outputs, bounded 3–5 idea batches, evidence-aware prompts, format-specific drafting, deterministic visual specifications, editorial accept/reject states, request idempotency, leases, and atomic monthly allowance reservation. Collected publisher records remain untrusted research input and never become system instructions or independent verification. AI output always requires human review.
+
+`AI_GENERATION_ENABLED=false` and `AI_MONTHLY_BUDGET_USD=0` are the operational defaults. No provider credential is required for manual use, no real model request was made during implementation or testing, and no scheduled AI job exists. See `docs/AI-CONTENT.md` for activation and review rules.

@@ -143,9 +143,18 @@ When separately authorized, design deterministic story grouping and evidence rev
 
 Develop the private hub across all ten subject areas defined in `MASTER-BLUEPRINT.md`. Plan personalized feeds, bookmarks, configurable digests, source freshness, and continuously updated ingestion. Keep private information separate from the public content workflow.
 
-## Planned phase: AI-assisted content and durable memory
+## Task 13: AI content intelligence, ideas, and drafting — implemented, disabled by default
 
-Add authenticated ownership and durable content persistence before server-side drafts or image requests. Then evaluate OpenAI-assisted research/drafts and provider-backed image generation with budget controls, human approval, durable asset storage, evidence-backed content memory, review, and correction workflows. Preserve the Task 11 format catalog and independent teaching styles.
+- Added a provider-neutral text-generation layer and OpenAI Responses API adapter with strict structured outputs, safe timeouts/retries/cancellation, mocked tests, and no build-time or module-initialization request.
+- Added bounded news-backed and evergreen idea discovery, duplicate checks against saved ideas/drafts, evidence references, Needs Review safeguards, editorial accept/reject decisions, and 3–5 result batches.
+- Added owner-triggered draft generation through the existing Content Studio, including format-specific posts/threads/polls, claim classification, X preflight rules, revision-preserving persistence, and safe deterministic visual specifications.
+- Preserved all 20 formats and separate first-principles/analogy behavior. Manual creation remains available; AI output is never auto-approved or published.
+- Added owner-scoped generation runs, evidence, suggestions, leases, idempotency, usage/cost accounting, and atomic allowance reservation through forward migration `0005_ai_content_generation.sql`. Development and production are migrated; managed Auth and existing data are unchanged.
+- Production generation remains unavailable: enabled defaults false, monthly allowance defaults zero, no paid request was made, and no AI Cron exists. Later activation requires explicit owner budget approval, a server-only key, current model/pricing review, and a redeploy.
+
+## Planned phase: AI image generation and deeper content memory
+
+Evaluate provider-backed image generation only after explicit budget and durable asset-storage approval. Add published-post memory and correction workflows when X publishing exists. Preserve deterministic visuals and evidence-backed human review.
 
 ## Planned phase: Human-reviewed X workflow
 

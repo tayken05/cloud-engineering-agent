@@ -1,6 +1,6 @@
 # Database foundation
 
-Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the initial migration to development and production. Later forward migrations add collection monitoring, Jobs & Opportunities, job discovery, and the Task 12 private content workspace. Public writes remain unavailable; content mutations require a managed-auth session plus the exact configured owner user ID.
+Task 4A defines a Neon-compatible PostgreSQL schema and local migration infrastructure. Task 4B.5 and Task 4B.10 apply the initial migration to development and production. Later forward migrations add collection monitoring, Jobs & Opportunities, job discovery, the Task 12 private content workspace, and Task 13 AI generation audit/editorial records. Public writes remain unavailable; content and AI mutations require a managed-auth session plus the exact configured owner user ID.
 
 ## Dependencies and boundaries
 
@@ -259,6 +259,18 @@ A second invocation of the same Drizzle migrator completed without adding a hist
 
 Task 11 adds no PostgreSQL objects and no migration. The existing managed `neon_auth` schema does not by itself provide an implemented application session, owner identity, or authorization policy. Persisting unpublished ideas, drafts, moderator answers, or image requests through a public route before that boundary exists would expose private administrative data.
 
-The first Content Studio release therefore keeps a validated, bounded document in browser-local storage and performs only a read-only query for optional `source_items` evidence. No content row, visual binary, base64 payload, or provider credential is written to Neon. Development and production migration history remains exactly `0000` through `0003`.
+The Task 11 release therefore kept a validated, bounded document in browser-local storage and performed only a read-only query for optional `source_items` evidence. Task 12 superseded that temporary storage boundary with owner-scoped persistent content tables in `0004`. No visual binary, base64 payload, or provider credential is written to Neon.
 
-A later authenticated migration should introduce durable content tables only after ownership, authorization, retention, revision, and asset-storage requirements are approved. That migration can model ideas, drafts, revisions, evidence links, media metadata, approval and publication attempts, and X identifiers. It must remain forward-only and keep actual image bytes in durable object storage rather than PostgreSQL.
+The authenticated `0004` migration introduced durable ideas, drafts, revisions, evidence links, and visual specifications. Future publication and asset-storage migrations must remain forward-only and keep actual image bytes in durable object storage rather than PostgreSQL.
+
+## Task 13 AI generation records
+
+Forward migration `0005_ai_content_generation.sql` adds four enums and three tables:
+
+- `ai_generation_runs`: one owner-scoped row per idempotent provider request, including kind, provider/model, fingerprint, lease, status, token counts, conservative reserved cost, estimated final cost, and safe failure code.
+- `ai_content_suggestions`: validated structured idea or draft output, ordinal, verification state, proposed/accepted/rejected editorial status, bounded feedback, and an optional restrictive link to the accepted content record.
+- `ai_generation_evidence`: a restrictive many-to-many link from each run to the exact collected `source_items` supplied as evidence.
+
+The composite `(run_id, owner_id)` relationships prevent cross-owner suggestion/evidence attachment. A partial unique index permits one live generation per owner, while `(owner_id, idempotency_key)` prevents retry duplication. JSON payloads must be objects, idea batches are capped at five, costs/token counts are nonnegative, and accepted suggestions must link to exactly one idea or draft.
+
+Migration `0005` is applied to both the exact development and production endpoints. Both executions matched SHA-256 `e112d33cc6f68bd62230e4e8d882a927982da2c8e4b92ea4f7866662a7bb9427`, recorded the sixth Drizzle history row, changed no existing application row counts, and preserved the managed `neon_auth` catalog fingerprint. Development constraint tests ran inside a rolled-back transaction and left no test rows. Production contains zero generation rows because paid generation is disabled.
