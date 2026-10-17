@@ -3,10 +3,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { preparePostInput, preparePostInstructions } from "../src/features/ai-content/prompts.ts";
+import { selectVariedEvidence } from "../src/features/ai-content/evidence-selection.ts";
 import { preparePost } from "../src/features/ai-content/service.ts";
 import { AiGenerationError } from "../src/features/ai-content/types.ts";
 import { validatePreparedPostOutput, validatePreparePostRequest } from "../src/features/ai-content/validation.ts";
 import { DRAFT_STATUSES } from "../src/features/content-studio/content-types.ts";
+import { CREATIVE_OPPORTUNITY_EVALUATION } from "./fixtures/creative-opportunity-evaluation.mjs";
 
 const evidenceId = "11111111-1111-4111-8111-111111111111";
 const evidence = [{
@@ -14,6 +16,7 @@ const evidence = [{
   primaryTopic: "networking",
   publishedAt: "2026-10-15T00:00:00.000Z",
   publisher: "Official Network Publisher",
+  publisherKind: "official_feed",
   summary: "A vendor describes a change to route validation behavior.",
   title: "Route validation update",
   url: "https://example.com/network-update",
@@ -34,11 +37,35 @@ const config = {
 function preparedOutput(overrides = {}) {
   return {
     worthPublishing: true,
+    candidates: [{
+      centralPremise: "Receiving a network route and trusting it are separate operational decisions.",
+      creativeApproach: "A concise contrast that overturns an assumption about route tables.",
+      editorialRisks: ["Keep the announcement scoped to the publisher record."],
+      evidenceBasis: "official_publisher_announcement",
+      evidenceSourceItemIds: [evidenceId],
+      formatId: "engineering-observations",
+      interestingReason: "The same route can be visible yet deliberately unusable, which is a useful contradiction.",
+      mediaPath: "text_only",
+      proposedPresentation: "standalone",
+      readerExperience: "A quick technical double take followed by a clear operational insight.",
+    }, {
+      centralPremise: "A fictional border officer interviews network routes about their paperwork.",
+      creativeApproach: "Clearly framed personification and dry bureaucratic satire.",
+      editorialRisks: ["Keep the scene unmistakably fictional."],
+      evidenceBasis: "fictional_premise",
+      evidenceSourceItemIds: [],
+      formatId: "tech-humor-memes",
+      interestingReason: "Route policy already behaves like selective admission, so bureaucracy creates recognizable comedy.",
+      mediaPath: "text_only",
+      proposedPresentation: "standalone",
+      readerExperience: "Recognition and a concise laugh without an attached lesson.",
+    }],
+    selectedCandidateIndex: 0,
     selectionRationale: "A concrete operational consequence makes this more useful than a broad explainer.",
     idea: {
       audience: "intermediate",
       contentAngle: "Show how a small validation decision changes which route operators trust.",
-      educationalObjective: "Help operators recognize the practical boundary between receiving a route and trusting it.",
+      editorialPurpose: "Reveal a counterintuitive distinction in one concise observation.",
       engagementStyle: "teach",
       evidenceSourceItemIds: [evidenceId],
       formatId: "engineering-observations",
@@ -51,7 +78,7 @@ function preparedOutput(overrides = {}) {
       technicalSubject: "route validation and operational trust",
       title: "A received route is not automatically a trusted route",
       verificationStatus: "evidence_backed",
-      whyUseful: "It connects a protocol detail to an operational decision engineers make every day.",
+      whyInteresting: "It connects a protocol detail to an operational decision engineers make every day.",
     },
     draft: {
       caption: "A router can learn a path and still refuse to trust it.\n\nThat distinction matters: reachability answers where traffic could go. Route validation helps decide whether that path deserves to be used.\n\nSame route table, very different risk.",
@@ -79,6 +106,22 @@ function preparedOutput(overrides = {}) {
     },
     ...overrides,
   };
+}
+
+function creativeMemory(overrides = {}) {
+  return [{
+    approach: "A compact capacity-planning discovery",
+    feedback: "",
+    formatId: "engineering-observations",
+    hook: "Linux pressure signals expose stalled work.",
+    mediaPath: "text_only",
+    premise: "Pressure stall information changes how teams interpret host saturation.",
+    status: "approved",
+    subject: "Linux pressure stall information",
+    updatedAt: "2026-10-14T00:00:00.000Z",
+    visualConcept: "",
+    ...overrides,
+  }];
 }
 
 class MemoryStore {
@@ -112,13 +155,15 @@ test("Prepare a Post accepts an empty direction and produces one persisted gener
   const result = await preparePost({
     config,
     evidence,
-    existingContent: ["Linux pressure stall information in capacity planning"],
+    creativeMemory: creativeMemory(),
     ownerId: "owner",
     provider: mock,
     request: { direction: "", idempotencyKey: "prepare-post:11111111-1111-4111-8111-111111111111" },
     store,
   });
   assert.equal(result.output.idea.formatId, "engineering-observations");
+  assert.equal(result.output.candidates.length, 2);
+  assert.equal(result.output.selectedCandidateIndex, 0);
   assert.equal(result.output.draft.caption.includes("trust"), true);
   assert.equal(mock.calls, 1);
   assert.equal(store.completed.length, 1);
@@ -126,37 +171,140 @@ test("Prepare a Post accepts an empty direction and produces one persisted gener
   assert.equal(store.beginInput.requestedCount, 1);
 });
 
+test("the real pipeline rejects lookalike candidates and accepts a truthful no-opportunity result", async () => {
+  const duplicate = preparedOutput({
+    candidates: [preparedOutput().candidates[0], {
+      ...preparedOutput().candidates[0],
+      centralPremise: preparedOutput().candidates[0].centralPremise,
+      creativeApproach: preparedOutput().candidates[0].creativeApproach,
+    }],
+  });
+  assert.throws(() => validatePreparedPostOutput(duplicate, new Set([evidenceId])), /not meaningfully distinct/);
+  const noOpportunityOutput = {
+    candidates: [],
+    draft: null,
+    idea: null,
+    selectedCandidateIndex: null,
+    selectionRationale: "The available facts are routine release metadata with no worthwhile premise yet.",
+    worthPublishing: false,
+  };
+  const none = validatePreparedPostOutput(noOpportunityOutput, new Set([evidenceId]));
+  assert.equal(none.worthPublishing, false);
+  assert.equal(none.draft, null);
+  const rejectedStore = new MemoryStore();
+  await assert.rejects(preparePost({
+    config, creativeMemory: creativeMemory(), evidence, ownerId: "owner", provider: provider(duplicate),
+    request: { direction: "", idempotencyKey: "prepare-post:44444444-4444-4444-8444-444444444444" }, store: rejectedStore,
+  }), (error) => error.code === "invalid_output");
+  assert.equal(rejectedStore.failed[0].errorCode, "invalid_output");
+  const emptyStore = new MemoryStore();
+  const emptyResult = await preparePost({
+    config, creativeMemory: creativeMemory(), evidence, ownerId: "owner", provider: provider(noOpportunityOutput),
+    request: { direction: "", idempotencyKey: "prepare-post:55555555-5555-4555-8555-555555555555" }, store: emptyStore,
+  });
+  assert.equal(emptyResult.output.worthPublishing, false);
+  assert.equal(emptyStore.completed[0].suggestions[0].verificationStatus, "needs_review");
+});
+
+test("a selected entertainment premise can remain noneducational in public copy", () => {
+  const output = preparedOutput({
+    candidates: [preparedOutput().candidates[1]],
+    selectedCandidateIndex: 0,
+    idea: {
+      ...preparedOutput().idea,
+      contentAngle: "A fictional border interview where a route has reachability but lacks acceptable paperwork.",
+      editorialPurpose: "Create one recognizable piece of network-policy satire and stop at the punchline.",
+      engagementStyle: "entertain",
+      evidenceSourceItemIds: [],
+      formatId: "tech-humor-memes",
+      recommendedPresentation: "standalone",
+      title: "Your route has been selected for additional screening",
+      verificationStatus: "needs_review",
+      whyInteresting: "Selective route policy maps naturally to deadpan border bureaucracy.",
+    },
+    draft: {
+      ...preparedOutput().draft,
+      caption: "Border control: Purpose of your visit?\n\nRoute: Reachability.\n\nBorder control: You have reachability. You do not have policy approval.",
+      evidenceSourceItemIds: [],
+      explanation: "Clearly fictional network-policy satire. The public copy ends at the punchline.",
+      factualClaims: [{ evidenceSourceItemIds: [], kind: "hypothetical_example", reviewStatus: "supported", text: "The border interview is fictional." }],
+      title: "Additional screening",
+      verificationStatus: "needs_review",
+    },
+  });
+  const result = validatePreparedPostOutput(output, new Set([evidenceId]));
+  assert.equal(result.idea.editorialPurpose.includes("satire"), true);
+  assert.doesNotMatch(result.draft.caption, /lesson|takeaway|what do you think/i);
+});
+
+test("creative memory sends rejection feedback and varied evidence avoids newest-publisher monoculture", () => {
+  const input = preparePostInput("", evidence, creativeMemory({ feedback: "Too much explanation after the punchline." }));
+  assert.match(input, /Too much explanation after the punchline/);
+  const pool = [
+    { ...evidence[0], id: "11111111-1111-4111-8111-111111111110", publisher: "Provider A", primaryTopic: "cloud_engineering" },
+    { ...evidence[0], id: "11111111-1111-4111-8111-111111111109", publisher: "Provider A", primaryTopic: "cloud_engineering" },
+    { ...evidence[0], id: "11111111-1111-4111-8111-111111111108", publisher: "Provider B", primaryTopic: "linux" },
+  ];
+  const selected = selectVariedEvidence(pool, 2);
+  assert.deepEqual(selected.map((item) => item.publisher), ["Provider A", "Provider B"]);
+});
+
+test("official announcements require publisher provenance and unverified claims stay in review", async () => {
+  const communityEvidence = [{ ...evidence[0], publisherKind: "community" }];
+  await assert.rejects(preparePost({
+    config, creativeMemory: creativeMemory(), evidence: communityEvidence, ownerId: "owner", provider: provider(preparedOutput()),
+    request: { direction: "", idempotencyKey: "prepare-post:66666666-6666-4666-8666-666666666666" }, store: new MemoryStore(),
+  }), (error) => error.code === "invalid_output");
+  const unverified = preparedOutput({
+    candidates: [{ ...preparedOutput().candidates[0], evidenceBasis: "unverified_claim" }],
+  });
+  const checked = validatePreparedPostOutput(unverified, new Set([evidenceId]));
+  assert.equal(checked.draft.verificationStatus, "needs_review");
+  assert.match(checked.draft.reviewFlags.join(" "), /unverified claim/i);
+});
+
 test("the newsroom prompt chooses among capabilities without turning charter examples into defaults", () => {
   const instructions = preparePostInstructions();
-  assert.match(instructions, /Silently explore three meaningfully different creative approaches/);
+  assert.match(instructions, /Return zero to three compact creative candidates/);
+  assert.match(instructions, /Three explanations with different titles are one candidate/);
   assert.match(instructions, /Do not default to beginner education, questions, diagrams, polls, or Ask Grok/);
   assert.match(instructions, /complete X-ready copy/);
-  assert.match(instructions, /worthwhile premise/);
+  assert.match(instructions, /nothing deserves a post/);
   assert.doesNotMatch(instructions, /server = hotel|bandwidth = road/i);
-  const input = preparePostInput("", evidence, ["A prior Kubernetes rollout post"]);
+  const input = preparePostInput("", evidence, creativeMemory());
   assert.match(input, /optionalOwnerDirection/);
-  assert.match(input, /existingContentToAvoidRepeating/);
-  assert.match(input, /untrustedRecentPublisherRecords/);
+  assert.match(input, /compactCreativeMemory/);
+  assert.match(input, /untrustedVariedPublisherRecords/);
 });
 
 test("validated packages may use genuinely different premises and formats", () => {
   const observation = validatePreparedPostOutput(preparedOutput(), new Set([evidenceId]));
   const history = validatePreparedPostOutput(preparedOutput({
+    candidates: [{
+      ...preparedOutput().candidates[0],
+      centralPremise: "Old coordination limits still shape how modern resolvers behave.",
+      creativeApproach: "A carefully sourced historical narrative driven by constraints.",
+      formatId: "historical-first-principles",
+      proposedPresentation: "thread",
+    }],
+    selectedCandidateIndex: 0,
     selectionRationale: "The historical constraint explains a modern operational habit that otherwise looks arbitrary.",
     idea: {
       ...preparedOutput().idea,
       contentAngle: "Trace how early name-service constraints shaped later resolver behavior without claiming a single linear invention path.",
-      educationalObjective: "Connect an early distributed naming problem to one carefully bounded modern resolver behavior.",
+      editorialPurpose: "Tell a historically accurate story that makes a modern resolver behavior feel less arbitrary.",
       formatId: "historical-first-principles",
+      recommendedPresentation: "thread",
       technicalCategory: "linux",
       technicalSubject: "distributed naming constraints and resolver behavior",
       title: "Why name resolution still carries old constraints",
-      whyUseful: "It makes a familiar operational behavior intelligible through accurate chronology.",
+      whyInteresting: "It makes a familiar operational behavior intelligible through accurate chronology.",
     },
     draft: {
       ...preparedOutput().draft,
-      caption: "Name resolution was a coordination problem before it became a command you run. Early systems had to answer a hard question: how can many machines share names without one fragile list deciding everything? Modern resolvers still carry traces of that constraint.",
+      caption: "",
       explanation: "This historical treatment requires final chronology review against the supplied publisher evidence.",
+      threadPosts: ["Name resolution was a coordination problem before it became a command you run.", "Many machines needed shared names without one fragile list deciding everything. Modern resolvers still carry traces of that constraint."],
       title: "The coordination problem behind name resolution",
     },
   }), new Set([evidenceId]));
@@ -169,18 +317,22 @@ test("validated packages may use genuinely different premises and formats", () =
 test("weak, duplicate, and typographic-dash outputs fail before persistence", async () => {
   assert.throws(
     () => validatePreparedPostOutput({ ...preparedOutput(), worthPublishing: false }, new Set([evidenceId])),
-    /worthwhile publishable premise/,
+    /rejected opportunity/,
   );
   assert.throws(
     () => validatePreparedPostOutput({ ...preparedOutput(), draft: { ...preparedOutput().draft, caption: "Trust — but verify." } }, new Set([evidenceId])),
     /malformed draft fields/,
+  );
+  assert.throws(
+    () => validatePreparedPostOutput({ ...preparedOutput(), draft: { ...preparedOutput().draft, caption: "x".repeat(281) } }, new Set([evidenceId])),
+    /weighted character limits/,
   );
   const store = new MemoryStore();
   await assert.rejects(
     preparePost({
       config,
       evidence,
-      existingContent: ["A received route is not automatically a trusted route route validation and operational trust"],
+      creativeMemory: creativeMemory({ premise: "Receiving a network route and trusting it are separate operational decisions.", subject: "Route validation and trust" }),
       ownerId: "owner",
       provider: provider(preparedOutput()),
       request: { direction: "network operations", idempotencyKey: "prepare-post:22222222-2222-4222-8222-222222222222" },
@@ -243,4 +395,13 @@ test("request validation is bounded and provider input remains untrusted", () =>
     { direction: "Prefer a Linux operations observation", idempotencyKey: "prepare-post:33333333-3333-4333-8333-333333333333" },
   );
   assert.throws(() => validatePreparePostRequest({ direction: "x", idempotencyKey: "short" }), /invalid/);
+});
+
+test("the unseen creative evaluation set covers opportunity, uncertainty, repetition, and rejection", () => {
+  assert.equal(CREATIVE_OPPORTUNITY_EVALUATION.length, 9);
+  assert.equal(new Set(CREATIVE_OPPORTUNITY_EVALUATION.map((scenario) => scenario.id)).size, 9);
+  for (const id of ["official-cloud-news", "surprising-linux-behavior", "historical-event", "engineering-culture-humor", "visual-opportunity", "playful-grok", "conflicting-evidence", "recently-covered", "accurate-but-boring"]) {
+    assert.equal(CREATIVE_OPPORTUNITY_EVALUATION.some((scenario) => scenario.id === id), true);
+  }
+  assert.equal(CREATIVE_OPPORTUNITY_EVALUATION.some((scenario) => /zero worthwhile candidates/i.test(scenario.expectedDecision)), true);
 });

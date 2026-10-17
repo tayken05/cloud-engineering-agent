@@ -168,6 +168,14 @@ Develop the private hub across all ten subject areas defined in `MASTER-BLUEPRIN
 - Added direct Approve, Revise, Reject, and Copy actions, persisted selection, expandable evidence/review notes, and truthful actual-image or pending-image presentation. Media generation remains owner authorized and idempotent.
 - Automated tests use varied mocked premises and make no paid request. A real owner-initiated generation remains the required test of editorial taste and actual provider output.
 
+## Task 15: Creative Opportunity Engine correction — implemented
+
+- Replaced the autonomous workflow's teaching-first contract with broad editorial-purpose discovery and a visible zero-to-three candidate exploration inside the existing single provider request.
+- Added deterministic candidate distinctness, evidence-basis, premise/mechanism memory, rejection-feedback, media-state, no-dash, and weighted X-length validation before persistence.
+- Added varied publisher/topic evidence selection and scoped support for official announcements without treating publisher statements as independent corroboration.
+- Preserved the 20-format registry, manual workflows, separate history/analogy capabilities, owner authorization, shared `$2` allowance, image inspection, and one-click Prepare a Post interface. No migration or paid test request was required.
+- Fresh owner-run generations remain necessary to judge originality, humor, usefulness, and social appeal before any future scheduling or publishing phase.
+
 ## Planned phase: Human-reviewed X workflow
 
 Support manual X publishing after human review and published post tracking. Evaluate the official X API where feasible before choosing integrations. Publication must remain an explicit human action; generating a draft is not permission to publish.

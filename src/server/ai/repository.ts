@@ -2,11 +2,13 @@ import "server-only";
 
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
-import { AiGenerationError, type AiIdeaSuggestion, type AiRunStore, type AiVerificationStatus } from "@/features/ai-content/types";
+import { AiGenerationError, type AiCreativeMemory, type AiIdeaSuggestion, type AiRunStore, type AiVerificationStatus } from "@/features/ai-content/types";
+import { selectVariedEvidence } from "@/features/ai-content/evidence-selection";
 import {
   aiContentSuggestions,
   aiGenerationEvidence,
   aiGenerationRuns,
+  contentDraftRevisions,
   contentDrafts,
   contentIdeas,
   sourceItems,
@@ -191,6 +193,90 @@ export async function listExistingContentSubjects(ownerId: string): Promise<read
   });
 }
 
+function jsonRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function text(value: unknown, maximum: number): string {
+  return typeof value === "string" ? value.trim().slice(0, maximum) : "";
+}
+
+function noteLine(value: string, label: string): string {
+  const line = value.split("\n").find((entry) => entry.startsWith(label));
+  return line?.slice(label.length).trim() ?? "";
+}
+
+export async function listCreativeMemory(ownerId: string, limit = 30): Promise<readonly AiCreativeMemory[]> {
+  const safeLimit = Math.min(30, Math.max(1, limit));
+  return withDatabaseTransaction(async (db) => {
+    const drafts = await db.select({
+      caption: contentDrafts.caption,
+      formatId: contentDrafts.formatId,
+      id: contentDrafts.id,
+      imagePrompt: contentDrafts.imagePrompt,
+      mediaPath: contentDrafts.mediaPath,
+      moderatorNotes: contentDrafts.moderatorNotes,
+      notes: contentIdeas.notes,
+      status: contentDrafts.status,
+      subject: contentIdeas.subject,
+      threadPosts: contentDrafts.threadPosts,
+      title: contentDrafts.title,
+      updatedAt: contentDrafts.updatedAt,
+    }).from(contentDrafts).leftJoin(contentIdeas, and(eq(contentDrafts.ideaId, contentIdeas.id), eq(contentDrafts.ownerId, contentIdeas.ownerId)))
+      .where(eq(contentDrafts.ownerId, ownerId)).orderBy(desc(contentDrafts.updatedAt)).limit(safeLimit);
+    const suggestions = await db.select({
+      acceptedDraftId: aiContentSuggestions.acceptedDraftId,
+      editorialFeedback: aiContentSuggestions.editorialFeedback,
+      payload: aiContentSuggestions.payload,
+    }).from(aiContentSuggestions).where(eq(aiContentSuggestions.ownerId, ownerId)).orderBy(desc(aiContentSuggestions.updatedAt)).limit(60);
+    const suggestionByDraft = new Map(suggestions.filter((item) => item.acceptedDraftId).map((item) => [item.acceptedDraftId!, item]));
+    const current: AiCreativeMemory[] = drafts.map((draft) => {
+      const suggestion = suggestionByDraft.get(draft.id);
+      const payload = jsonRecord(suggestion?.payload);
+      const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
+      const selectedIndex = typeof payload?.selectedCandidateIndex === "number" ? Math.floor(payload.selectedCandidateIndex) : -1;
+      const selected = jsonRecord(candidates[selectedIndex]);
+      const rejection = noteLine(draft.moderatorNotes, "Editorial rejection:");
+      return {
+        approach: text(selected?.creativeApproach, 240) || noteLine(draft.notes ?? "", "Angle:"),
+        feedback: rejection || text(suggestion?.editorialFeedback, 500),
+        formatId: draft.formatId,
+        hook: (draft.threadPosts.find((post) => post.trim()) ?? draft.caption).slice(0, 280),
+        mediaPath: draft.mediaPath,
+        premise: text(selected?.centralPremise, 500) || noteLine(draft.notes ?? "", "Angle:") || draft.title,
+        status: draft.status,
+        subject: draft.subject ?? draft.title,
+        updatedAt: draft.updatedAt.toISOString(),
+        visualConcept: draft.imagePrompt?.slice(0, 300) ?? "",
+      };
+    });
+    const revisions = await db.select({
+      createdAt: contentDraftRevisions.createdAt,
+      draftId: contentDraftRevisions.draftId,
+      snapshot: contentDraftRevisions.snapshot,
+    }).from(contentDraftRevisions).where(eq(contentDraftRevisions.ownerId, ownerId)).orderBy(desc(contentDraftRevisions.createdAt)).limit(12);
+    const draftById = new Map(drafts.map((draft) => [draft.id, draft]));
+    return [...current, ...revisions.flatMap((revision): AiCreativeMemory[] => {
+      const snapshot = jsonRecord(revision.snapshot);
+      const parent = draftById.get(revision.draftId);
+      if (!snapshot || !parent) return [];
+      const threadPosts = Array.isArray(snapshot.threadPosts) ? snapshot.threadPosts.filter((entry): entry is string => typeof entry === "string") : [];
+      return [{
+        approach: "Earlier saved revision",
+        feedback: "",
+        formatId: typeof snapshot.formatId === "string" ? snapshot.formatId as AiCreativeMemory["formatId"] : parent.formatId,
+        hook: (threadPosts.find((post) => post.trim()) ?? text(snapshot.caption, 280)).slice(0, 280),
+        mediaPath: typeof snapshot.mediaPath === "string" ? snapshot.mediaPath as AiCreativeMemory["mediaPath"] : parent.mediaPath,
+        premise: text(snapshot.title, 300) || parent.title,
+        status: "revision",
+        subject: parent.subject ?? parent.title,
+        updatedAt: revision.createdAt.toISOString(),
+        visualConcept: text(snapshot.imagePrompt, 300),
+      }];
+    })].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).slice(0, safeLimit);
+  });
+}
+
 export async function listAiEvidence(options: Readonly<{ ids?: readonly string[]; limit?: number }> = {}) {
   const limit = Math.min(20, Math.max(1, options.limit ?? 20));
   if (options.ids && options.ids.length === 0) return [];
@@ -200,6 +286,7 @@ export async function listAiEvidence(options: Readonly<{ ids?: readonly string[]
       primaryTopic: sourceItems.primaryTopic,
       publishedAt: sourceItems.publishedAt,
       publisher: sources.name,
+      publisherKind: sources.kind,
       summary: sourceItems.summary,
       title: sourceItems.title,
       url: sourceItems.originalUrl,
@@ -210,4 +297,21 @@ export async function listAiEvidence(options: Readonly<{ ids?: readonly string[]
       : await query.orderBy(desc(sourceItems.publishedAt), desc(sourceItems.collectedAt)).limit(limit);
     return rows.map((row) => ({ ...row, publishedAt: row.publishedAt?.toISOString() ?? null }));
   });
+}
+
+export async function listCreativeEvidence(limit = 16) {
+  const safeLimit = Math.min(20, Math.max(1, limit));
+  const pool = await withDatabaseTransaction(async (db) => db.select({
+    id: sourceItems.id,
+    primaryTopic: sourceItems.primaryTopic,
+    publishedAt: sourceItems.publishedAt,
+    publisher: sources.name,
+    publisherKind: sources.kind,
+    summary: sourceItems.summary,
+    title: sourceItems.title,
+    url: sourceItems.originalUrl,
+    verificationStatus: sourceItems.verificationStatus,
+  }).from(sourceItems).innerJoin(sources, eq(sourceItems.sourceId, sources.id))
+    .orderBy(desc(sourceItems.publishedAt), desc(sourceItems.collectedAt)).limit(60));
+  return selectVariedEvidence(pool.map((item) => ({ ...item, publishedAt: item.publishedAt?.toISOString() ?? null })), safeLimit);
 }

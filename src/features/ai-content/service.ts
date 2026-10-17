@@ -4,6 +4,7 @@ import {
   draftOutputSchema,
   ideaOutputSchema,
   isNearDuplicate,
+  isPremiseNearDuplicate,
   preparedPostOutputSchema,
   requestFingerprint,
   validateDraftOutput,
@@ -14,6 +15,7 @@ import {
 } from "./validation.ts";
 import {
   AiGenerationError,
+  type AiCreativeMemory,
   type AiDraftOutput,
   type AiIdeaSuggestion,
   type AiPreparedPostOutput,
@@ -97,7 +99,7 @@ export async function generateIdeaBatch(input: Readonly<{
 export async function preparePost(input: Readonly<{
   config: AiRuntimeConfig;
   evidence: readonly AiResearchEvidence[];
-  existingContent: readonly string[];
+  creativeMemory: readonly AiCreativeMemory[];
   ownerId: string;
   provider: AiTextProvider;
   request: unknown;
@@ -108,9 +110,9 @@ export async function preparePost(input: Readonly<{
   const evidence = input.evidence.slice(0, 20);
   const allowedEvidence = new Set(evidence.map((item) => item.id));
   const instructions = preparePostInstructions();
-  const providerInput = preparePostInput(request.direction, evidence, input.existingContent);
+  const providerInput = preparePostInput(request.direction, evidence, input.creativeMemory);
   const reservationMicrousd = estimateCostMicrousd(input.config, estimatedInputTokens(`${instructions}\n${providerInput}`), PREPARED_POST_MAX_OUTPUT_TOKENS);
-  const fingerprint = requestFingerprint({ direction: request.direction, evidenceIds: [...allowedEvidence].sort(), history: input.existingContent.slice(0, 100) });
+  const fingerprint = requestFingerprint({ direction: request.direction, evidenceIds: [...allowedEvidence].sort(), memory: input.creativeMemory.slice(0, 30) });
   const reservation = await input.store.begin({
     evidenceIds: [...allowedEvidence], fingerprint, idempotencyKey: request.idempotencyKey,
     kind: "draft", model: input.provider.model, monthlyBudgetMicrousd: input.config.monthlyBudgetMicrousd,
@@ -128,8 +130,33 @@ export async function preparePost(input: Readonly<{
       signal,
     });
     const output = validatePreparedPostOutput(result.data, allowedEvidence);
-    if (isNearDuplicate(`${output.idea.title} ${output.idea.technicalSubject}`, input.existingContent)
-      || isNearDuplicate(`${output.draft.title} ${output.draft.caption} ${output.draft.threadPosts.join(" ")}`, input.existingContent)) {
+    const evidenceById = new Map(evidence.map((item) => [item.id, item]));
+    for (const candidate of output.candidates) {
+      const candidateEvidence = candidate.evidenceSourceItemIds.flatMap((id) => {
+        const item = evidenceById.get(id);
+        return item ? [item] : [];
+      });
+      if (candidate.evidenceBasis === "official_publisher_announcement"
+        && candidateEvidence.some((item) => item.publisherKind === "community")) {
+        throw new AiGenerationError("invalid_output", "A community record cannot be treated as an official publisher announcement.");
+      }
+      if (candidate.evidenceBasis === "independently_supported_fact") {
+        const publishers = new Set(candidateEvidence.map((item) => item.publisher));
+        const independentlySupported = candidateEvidence.some((item) => item.verificationStatus === "verified") || publishers.size >= 2;
+        if (!independentlySupported) throw new AiGenerationError("invalid_output", "Independent support requires verified evidence or multiple publishers.");
+      }
+    }
+    const previousPremises = input.creativeMemory.map((item) => `${item.subject} ${item.premise}`);
+    const previousApproaches = input.creativeMemory.map((item) => `${item.approach} ${item.formatId} ${item.mediaPath}`);
+    for (const candidate of output.candidates) {
+      if (isPremiseNearDuplicate(candidate.centralPremise, previousPremises)
+        || (candidate.creativeApproach.length > 30 && isNearDuplicate(`${candidate.creativeApproach} ${candidate.formatId} ${candidate.mediaPath}`, previousApproaches))) {
+        throw new AiGenerationError("invalid_output", "A creative candidate repeated a recent premise or mechanism.");
+      }
+    }
+    if (output.worthPublishing && output.idea && output.draft
+      && (isPremiseNearDuplicate(`${output.idea.title} ${output.idea.contentAngle}`, previousPremises)
+        || isNearDuplicate(`${output.draft.title} ${output.draft.caption} ${output.draft.threadPosts.join(" ")}`, input.creativeMemory.map((item) => `${item.subject} ${item.hook}`)))) {
       throw new AiGenerationError("invalid_output", "The prepared post repeated existing content.");
     }
     await input.store.complete({
@@ -139,7 +166,7 @@ export async function preparePost(input: Readonly<{
       ownerId: input.ownerId,
       responseId: result.responseId,
       runId: reservation.runId,
-      suggestions: [{ kind: "draft", payload: payload(output), verificationStatus: output.draft.verificationStatus }],
+      suggestions: [{ kind: "draft", payload: payload(output), verificationStatus: output.draft?.verificationStatus ?? "needs_review" }],
     });
     return { duplicate: false, output, runId: reservation.runId };
   } catch (error) {

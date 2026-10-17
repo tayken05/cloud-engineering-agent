@@ -169,8 +169,8 @@ export function ContentIdeasWorkspace({
               {IDEA_STATUSES.map((value) => <option key={value} value={value}>{label(value)}</option>)}
             </select>
           </label>
-          <label className="wide-field">Educational objective
-            <textarea required rows={3} maxLength={1000} value={form.educationalObjective} onChange={(event) => set("educationalObjective", event.target.value)} placeholder="What should an engineer understand or be able to do after reading this?" />
+          <label className="wide-field">Editorial purpose
+            <textarea required rows={3} maxLength={1000} value={form.educationalObjective} onChange={(event) => set("educationalObjective", event.target.value)} placeholder="What should this make the reader discover, feel, discuss, enjoy, or understand?" />
           </label>
           <label className="wide-field">Optional publisher evidence
             <select

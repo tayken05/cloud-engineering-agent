@@ -15,6 +15,7 @@ const evidence = [{
   primaryTopic: "cloud_engineering",
   publishedAt: "2026-10-15T00:00:00.000Z",
   publisher: "Official Cloud Publisher",
+  publisherKind: "official_feed",
   summary: "A bounded publisher summary.",
   title: "A verified platform update",
   url: "https://example.com/update",
@@ -131,7 +132,8 @@ test("all 20 formats remain unified with separate first-principles and analogy g
   assert.match(instructions, /Cloud Engineering, Networking, Linux, DevOps, Infrastructure, Kubernetes/);
   assert.match(instructions, /Do not write generic textbook definitions/);
   assert.notEqual(draftInstructions("historical-first-principles"), draftInstructions("real-world-analogies"));
-  assert.match(draftInstructions("ask-grok"), /specific evidence visible/i);
+  assert.match(draftInstructions("ask-grok"), /playful roleplay/i);
+  assert.match(draftInstructions("ask-grok"), /never imply Grok already replied/i);
   assert.match(draftInstructions("tech-humor-memes"), /punchline/i);
   assert.match(draftInstructions("troubleshooting-challenges"), /diagnosis private/i);
 });

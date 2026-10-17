@@ -11,21 +11,76 @@ export const AI_RESEARCH_PATHS = ["news", "evergreen"] as const;
 export const AI_PRESENTATIONS = ["standalone", "thread", "poll", "visual"] as const;
 export const AI_VERIFICATION_STATUSES = ["evidence_backed", "needs_review"] as const;
 export const AI_DRAFT_INTENTS = ["develop_current", "new_subject"] as const;
+export const AI_EVIDENCE_BASES = [
+  "official_publisher_announcement",
+  "independently_supported_fact",
+  "unverified_claim",
+  "interpretation",
+  "fictional_premise",
+  "evergreen_knowledge",
+] as const;
 
 export type AiResearchPath = (typeof AI_RESEARCH_PATHS)[number];
 export type AiPresentation = (typeof AI_PRESENTATIONS)[number];
 export type AiVerificationStatus = (typeof AI_VERIFICATION_STATUSES)[number];
 export type AiDraftIntent = (typeof AI_DRAFT_INTENTS)[number];
+export type AiEvidenceBasis = (typeof AI_EVIDENCE_BASES)[number];
 
 export type AiResearchEvidence = Readonly<{
   id: string;
   primaryTopic: TechnicalCategory | null;
   publishedAt: string | null;
   publisher: string;
+  publisherKind: "official_feed" | "publisher" | "engineering_organization" | "community";
   summary: string | null;
   title: string;
   url: string;
   verificationStatus: string;
+}>;
+
+export type AiCreativeMemory = Readonly<{
+  approach: string;
+  feedback: string;
+  formatId: ContentFormatId;
+  hook: string;
+  mediaPath: ContentMediaPath;
+  premise: string;
+  status: string;
+  subject: string;
+  updatedAt: string;
+  visualConcept: string;
+}>;
+
+export type AiCreativeCandidate = Readonly<{
+  centralPremise: string;
+  creativeApproach: string;
+  editorialRisks: readonly string[];
+  evidenceBasis: AiEvidenceBasis;
+  evidenceSourceItemIds: readonly string[];
+  formatId: ContentFormatId;
+  interestingReason: string;
+  mediaPath: ContentMediaPath;
+  proposedPresentation: AiPresentation;
+  readerExperience: string;
+}>;
+
+export type AiPreparedIdea = Readonly<{
+  audience: AudienceLevel;
+  contentAngle: string;
+  editorialPurpose: string;
+  engagementStyle: EngagementStyle;
+  evidenceSourceItemIds: readonly string[];
+  formatId: ContentFormatId;
+  recommendedPresentation: AiPresentation;
+  reviewFlags: readonly string[];
+  seriesKey: string | null;
+  seriesPosition: number | null;
+  suggestedVisual: VisualSpecification | null;
+  technicalCategory: TechnicalCategory;
+  technicalSubject: string;
+  title: string;
+  verificationStatus: AiVerificationStatus;
+  whyInteresting: string;
 }>;
 
 export type AiIdeaRequest = Readonly<{
@@ -99,10 +154,12 @@ export type AiDraftOutput = Readonly<{
 }>;
 
 export type AiPreparedPostOutput = Readonly<{
-  draft: AiDraftOutput;
-  idea: AiIdeaSuggestion;
+  candidates: readonly AiCreativeCandidate[];
+  draft: AiDraftOutput | null;
+  idea: AiPreparedIdea | null;
+  selectedCandidateIndex: number | null;
   selectionRationale: string;
-  worthPublishing: true;
+  worthPublishing: boolean;
 }>;
 
 export type AiProviderRequest = Readonly<{

@@ -272,3 +272,13 @@ No database migration is necessary for this security model. Revisit durable cont
 - Store the prepared idea and draft in one PostgreSQL transaction. Use explicit `ready_for_review`, `needs_review`, `approved`, and `rejected` states; none implies publication. Approval checks X preflight rules and requires a stored image for media-based packages. Revision uses the existing optimistic-concurrency and history path.
 - Keep automatic image generation behind a reusable owner-controlled browser permission and the existing per-request/shared allowance. Without permission or available budget, save the text and show the visual as pending. Never present an image brief as generated media.
 - Migration `0007_intelligent_newsroom.sql` only extends the draft-status enum. Guarded migration tooling checks exact endpoints, the reviewed checksum and history, application row counts, and the managed Auth catalog. Normal builds and deploys never migrate.
+
+## Task 15 creative opportunity engine correction — 2026-10-17
+
+- Keep one bounded text-generation request. Require that request to expose zero to three compact candidate summaries before selecting a finished package; do not add agents or a second evaluator call.
+- Replace the autonomous workflow's mandatory educational objective with a broad editorial purpose while preserving the existing database column for compatibility. Manual idea and draft editing retain their current fields and behavior.
+- Treat all 20 formats as available capabilities, but send only capability names during autonomous exploration. Apply relevant validation after a treatment is selected. Charter examples remain demonstrations rather than templates.
+- Use varied evidence across topics and publishers. Official records may support attributed announcements within their scope; independent-fact claims require verified or multi-publisher evidence, while unverified claims force Needs Review.
+- Build compact creative memory from recent ideas, drafts, revision snapshots, hooks, formats, visuals, states, and rejection feedback. Reject near-duplicate premises and creative mechanisms without permanently blocking a subject.
+- Reject invalid standalone X copy before persistence using platform-style weighted length, transformed URL length, Unicode weighting, and the existing typographic-dash rule. Threads must be intentional and contain multiple valid segments.
+- Store candidate summaries in the existing suggestion JSON. No database migration, provider, schedule, allowance, or public endpoint change is required. Passing tests does not establish taste; fresh owner-run outputs remain the editorial evaluation.

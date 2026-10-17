@@ -188,8 +188,16 @@ The image-first flow is generate, validate PNG, inspect actual pixels, save priv
 
 `ContentStudioWorkspace` makes `Prepare a Post` the primary owner action while retaining the existing manual editor in a secondary disclosure. The Server Action authenticates the exact owner before reading source intelligence or content history. One bounded Responses API call returns one structured selected idea and complete draft; it does not expose discarded approaches or run a multi-agent loop.
 
-The service supplies at most 20 recent publisher records and up to 100 prior content summaries. Prompt and output validation require a worthwhile premise, known evidence IDs, the existing format registry, bounded text and visual fields, factual-claim classifications, X limits, and no typographic em/en dashes. Near-duplicate ideas or copy fail before content persistence. Publisher content remains untrusted data.
+The original Task 14 service supplied a newest-first publisher slice and simple subject summaries. Task 15 replaces that input with a small varied evidence set and compact creative memory covering premises, mechanisms, formats, hooks, visuals, revision history, status, and rejection feedback. Publisher content remains untrusted data.
 
 `savePreparedContentPackage` inserts the idea, its evidence, the draft, its evidence, and an optional deterministic visual specification in one PostgreSQL transaction. Forward migration `0007_intelligent_newsroom.sql` extends the existing draft-state enum with `needs_review`, `approved`, and `rejected`; no table or managed-auth object changes. Revisions continue through optimistic version checks and the existing revision table.
 
 For a recommended image, Studio either uses the owner's remembered device permission and existing protected image action or shows an explicit pending-media state. Generated pixels are inspected and stored privately before appearing in preview. A media-based package cannot be approved without a stored owner-scoped asset. All text and image work shares existing run leases, idempotency, accounting, and the `$2` application allowance. Builds and deploys never generate content or migrate a database.
+
+## Task 15: Creative opportunity engine correction
+
+The one-call newsroom contract now returns zero to three compact creative candidates before the selected package. Candidate summaries record premise, interesting reason, approach, reader experience, evidence basis, medium, and risks. The application checks distinctness, provenance, recent premise/mechanism reuse, media consistency, no-dash copy, and platform-weighted X limits independently of the model's self-rating. Zero worthwhile candidates creates no idea or draft.
+
+The autonomous prompt receives capability names rather than all 20 format templates. Its editorial purpose can be discovery, entertainment, story, observation, humor, interaction, discussion, or education. First-principles history and analogy remain separate capabilities with their existing post-selection safeguards. Ask Grok also supports playful social or roleplay treatments when grounded and never claims a response occurred.
+
+The existing `ai_content_suggestions.output` JSON stores candidate summaries and the editorial selection rationale. Existing content and revision tables supply compact creative memory, so no migration or new service is required. The existing provider call, owner boundary, lease, idempotency, budget accounting, private-media workflow, and transactional package save remain unchanged.

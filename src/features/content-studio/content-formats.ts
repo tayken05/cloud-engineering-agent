@@ -66,8 +66,8 @@ export const CONTENT_FORMATS = [
     id: "ask-grok",
     label: "Ask Grok",
     mode: "single",
-    guidance: "Base the question on specific evidence visible in the attached image or deterministic visual. Ask @grok to inspect, compare, or diagnose it, identify what engineers should notice, and keep the correct answer and caveats private. Never imply Grok already replied.",
-    template: ["Visual evidence", "Question for @grok", "What engineers should assess", "Moderator notes", "Follow-up invitation"],
+    guidance: "Use @grok only when a real interaction improves the premise. It may be playful roleplay, satire, a social exchange, a clever challenge, visual interpretation, or technical examination. Ground image-based questions in inspected pixels, keep any correct answer private, and never imply Grok already replied.",
+    template: ["Creative premise", "Optional evidence or visual", "Question or role for @grok", "Private context", "Truthful interaction state"],
   },
   {
     id: "myths-vs-facts",

@@ -12,16 +12,19 @@ import {
 } from "../content-studio/content-types.ts";
 import { countXCharacters, X_POLL_OPTION_LIMIT, X_POST_CHARACTER_LIMIT } from "../content-studio/content-workspace.ts";
 import {
+  AI_EVIDENCE_BASES,
   AI_PRESENTATIONS,
   AI_DRAFT_INTENTS,
   AI_RESEARCH_PATHS,
   AI_VERIFICATION_STATUSES,
   AiGenerationError,
+  type AiCreativeCandidate,
   type AiDraftOutput,
   type AiDraftRequest,
   type AiFactualClaim,
   type AiIdeaRequest,
   type AiIdeaSuggestion,
+  type AiPreparedIdea,
   type AiPreparedPostOutput,
   type AiPreparePostRequest,
 } from "./types.ts";
@@ -215,31 +218,137 @@ export function validateDraftOutput(value: unknown, formatId: ContentFormatId, a
   return { caption, evidenceSourceItemIds: ids, explanation, factualClaims: claims, mediaRecommendation: { altText, imagePrompt, path: mediaPath, rationale }, moderatorNotes, pollOptions, reviewFlags: [...new Set(flags)].slice(0, 20), threadPosts, title, verificationStatus: safeStatus, visual: visualSpec };
 }
 
-export function validatePreparedPostOutput(value: unknown, allowedEvidence: ReadonlySet<string>): AiPreparedPostOutput {
-  const item = record(value);
-  const selectionRationale = boundedText(item?.selectionRationale, 1200);
-  if (!item || item.worthPublishing !== true || !selectionRationale) {
-    throw new AiGenerationError("invalid_output", "The provider did not identify a worthwhile publishable premise.");
-  }
-  const idea = validateIdeaSuggestions({ ideas: [item.idea] }, allowedEvidence, 1)[0];
-  if (!idea) throw new AiGenerationError("invalid_output", "The provider did not return a valid selected idea.");
-  const draft = validateDraftOutput(item.draft, idea.formatId, allowedEvidence);
-  return { draft, idea, selectionRationale, worthPublishing: true };
-}
-
 function normalizedWords(value: string): Set<string> {
   return new Set(value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2));
 }
 
+function wordSimilarity(leftValue: string, rightValue: string): number {
+  const left = normalizedWords(leftValue);
+  const right = normalizedWords(rightValue);
+  if (left.size === 0 || right.size === 0) return 0;
+  const intersection = [...left].filter((word) => right.has(word)).length;
+  const union = new Set([...left, ...right]).size;
+  return union > 0 ? intersection / union : 0;
+}
+
 export function isNearDuplicate(candidate: string, existing: readonly string[]): boolean {
-  const left = normalizedWords(candidate);
-  if (left.size === 0) return true;
-  return existing.some((value) => {
-    const right = normalizedWords(value);
-    const intersection = [...left].filter((word) => right.has(word)).length;
-    const union = new Set([...left, ...right]).size;
-    return union > 0 && intersection / union >= 0.72;
-  });
+  if (normalizedWords(candidate).size === 0) return true;
+  return existing.some((value) => wordSimilarity(candidate, value) >= 0.72);
+}
+
+export function isPremiseNearDuplicate(candidate: string, existing: readonly string[]): boolean {
+  if (normalizedWords(candidate).size === 0) return true;
+  return existing.some((value) => wordSimilarity(candidate, value) >= 0.52);
+}
+
+function creativeCandidate(value: unknown, allowedEvidence: ReadonlySet<string>): AiCreativeCandidate | null {
+  const item = record(value);
+  if (!item) return null;
+  const centralPremise = boundedText(item.centralPremise, 600);
+  const interestingReason = boundedText(item.interestingReason, 600);
+  const creativeApproach = boundedText(item.creativeApproach, 400);
+  const readerExperience = boundedText(item.readerExperience, 400);
+  const formatId = member(item.formatId, CONTENT_FORMAT_IDS);
+  const proposedPresentation = member(item.proposedPresentation, AI_PRESENTATIONS);
+  const mediaPath = member(item.mediaPath, CONTENT_MEDIA_PATHS);
+  const evidenceBasis = member(item.evidenceBasis, AI_EVIDENCE_BASES);
+  const ids = evidenceIds(item.evidenceSourceItemIds, allowedEvidence);
+  const editorialRisks = stringArray(item.editorialRisks, 8, 300);
+  if (!centralPremise || !interestingReason || !creativeApproach || !readerExperience || !formatId || !proposedPresentation || !mediaPath || !evidenceBasis || !ids || !editorialRisks || containsForbiddenDash(item)) return null;
+  if ((evidenceBasis === "official_publisher_announcement" || evidenceBasis === "independently_supported_fact") && ids.length === 0) return null;
+  return { centralPremise, creativeApproach, editorialRisks, evidenceBasis, evidenceSourceItemIds: ids, formatId, interestingReason, mediaPath, proposedPresentation, readerExperience };
+}
+
+function preparedIdea(value: unknown, allowedEvidence: ReadonlySet<string>): AiPreparedIdea | null {
+  const item = record(value);
+  if (!item) return null;
+  const title = boundedText(item.title, 300);
+  const technicalSubject = boundedText(item.technicalSubject, 300);
+  const formatId = member(item.formatId, CONTENT_FORMAT_IDS);
+  const audience = member(item.audience, AUDIENCE_LEVELS);
+  const technicalCategory = member(item.technicalCategory, TECHNICAL_CATEGORIES);
+  const editorialPurpose = boundedText(item.editorialPurpose, 1000);
+  const whyInteresting = boundedText(item.whyInteresting, 1000);
+  const contentAngle = boundedText(item.contentAngle, 1200);
+  const engagementStyle = member(item.engagementStyle, ENGAGEMENT_STYLES);
+  const recommendedPresentation = member(item.recommendedPresentation, AI_PRESENTATIONS);
+  const verificationStatus = member(item.verificationStatus, AI_VERIFICATION_STATUSES);
+  const ids = evidenceIds(item.evidenceSourceItemIds, allowedEvidence);
+  const reviewFlags = stringArray(item.reviewFlags, 12, 300);
+  const suggestedVisual = visual(item.suggestedVisual);
+  const seriesKey = item.seriesKey === null ? null : boundedText(item.seriesKey, 100);
+  const seriesPosition = item.seriesPosition === null ? null : typeof item.seriesPosition === "number" ? Math.floor(item.seriesPosition) : NaN;
+  if (!title || !technicalSubject || !formatId || !audience || !technicalCategory || !editorialPurpose || !whyInteresting || !contentAngle || !engagementStyle || !recommendedPresentation || !verificationStatus || !ids || !reviewFlags || suggestedVisual === undefined || containsForbiddenDash(item) || (seriesKey !== null && (!seriesKey || !SAFE_SERIES_KEY.test(seriesKey))) || (seriesPosition !== null && (!Number.isInteger(seriesPosition) || seriesPosition < 1 || seriesPosition > 999))) return null;
+  const flags = [...reviewFlags];
+  let safeStatus = verificationStatus;
+  if (formatId === "historical-first-principles" && ids.length === 0) {
+    safeStatus = "needs_review";
+    flags.push("Historical chronology requires supporting evidence.");
+  }
+  if (formatId === "real-world-analogies" && !/limit|break|does not|isn't|not model/i.test(`${contentAngle} ${editorialPurpose}`)) {
+    safeStatus = "needs_review";
+    flags.push("The analogy needs an explicit statement of its limits.");
+  }
+  return { audience, contentAngle, editorialPurpose, engagementStyle, evidenceSourceItemIds: ids, formatId, recommendedPresentation, reviewFlags: [...new Set(flags)].slice(0, 12), seriesKey, seriesPosition, suggestedVisual, technicalCategory, technicalSubject, title, verificationStatus: safeStatus, whyInteresting };
+}
+
+export function validatePreparedPostOutput(value: unknown, allowedEvidence: ReadonlySet<string>): AiPreparedPostOutput {
+  const item = record(value);
+  const selectionRationale = boundedText(item?.selectionRationale, 1200);
+  if (!item || typeof item.worthPublishing !== "boolean" || !selectionRationale || !Array.isArray(item.candidates) || item.candidates.length > 3) {
+    throw new AiGenerationError("invalid_output", "The provider returned an invalid creative opportunity set.");
+  }
+  const candidates = item.candidates.map((candidate) => creativeCandidate(candidate, allowedEvidence));
+  if (candidates.some((candidate) => candidate === null)) throw new AiGenerationError("invalid_output", "The provider returned malformed creative candidates.");
+  const safeCandidates = candidates as AiCreativeCandidate[];
+  for (let left = 0; left < safeCandidates.length; left += 1) {
+    for (let right = left + 1; right < safeCandidates.length; right += 1) {
+      const premiseSimilarity = wordSimilarity(safeCandidates[left]!.centralPremise, safeCandidates[right]!.centralPremise);
+      const mechanismSimilarity = wordSimilarity(
+        `${safeCandidates[left]!.creativeApproach} ${safeCandidates[left]!.readerExperience}`,
+        `${safeCandidates[right]!.creativeApproach} ${safeCandidates[right]!.readerExperience}`,
+      );
+      if (premiseSimilarity >= 0.68 || mechanismSimilarity >= 0.72) {
+        throw new AiGenerationError("invalid_output", "The creative candidates were not meaningfully distinct.");
+      }
+    }
+  }
+  if (!item.worthPublishing) {
+    if (item.selectedCandidateIndex !== null || item.idea !== null || item.draft !== null) throw new AiGenerationError("invalid_output", "A rejected opportunity cannot contain selected content.");
+    return { candidates: safeCandidates, draft: null, idea: null, selectedCandidateIndex: null, selectionRationale, worthPublishing: false };
+  }
+  const selectedCandidateIndex = typeof item.selectedCandidateIndex === "number" ? Math.floor(item.selectedCandidateIndex) : -1;
+  const selected = safeCandidates[selectedCandidateIndex];
+  if (!selected || selectedCandidateIndex < 0 || selectedCandidateIndex >= safeCandidates.length) throw new AiGenerationError("invalid_output", "The selected creative candidate is invalid.");
+  const idea = preparedIdea(item.idea, allowedEvidence);
+  if (!idea) throw new AiGenerationError("invalid_output", "The provider did not return a valid selected idea.");
+  const draft = validateDraftOutput(item.draft, idea.formatId, allowedEvidence);
+  if (idea.formatId !== selected.formatId || idea.recommendedPresentation !== selected.proposedPresentation || draft.mediaRecommendation.path !== selected.mediaPath) {
+    throw new AiGenerationError("invalid_output", "The finished package does not match the selected creative candidate.");
+  }
+  if ([...idea.evidenceSourceItemIds, ...draft.evidenceSourceItemIds].some((id) => !selected.evidenceSourceItemIds.includes(id))) {
+    throw new AiGenerationError("invalid_output", "The finished package introduced evidence outside the selected candidate.");
+  }
+  const captionLength = draft.caption ? countXCharacters(draft.caption) : 0;
+  if (captionLength > X_POST_CHARACTER_LIMIT || draft.threadPosts.some((post) => countXCharacters(post) > X_POST_CHARACTER_LIMIT)) {
+    throw new AiGenerationError("invalid_output", "The finished copy exceeds X weighted character limits.");
+  }
+  if (selected.proposedPresentation === "thread" && draft.threadPosts.length < 2) throw new AiGenerationError("invalid_output", "The selected thread was not structured into valid posts.");
+  if (selected.proposedPresentation !== "thread" && draft.threadPosts.length > 0) throw new AiGenerationError("invalid_output", "A non-thread candidate returned thread copy.");
+  if (selected.proposedPresentation === "poll" && (draft.pollOptions.length < 2 || draft.pollOptions.some((option) => countXCharacters(option) > X_POLL_OPTION_LIMIT))) {
+    throw new AiGenerationError("invalid_output", "The selected poll is not valid for X.");
+  }
+  if (selected.evidenceBasis === "unverified_claim") {
+    return {
+      candidates: safeCandidates,
+      draft: { ...draft, reviewFlags: [...new Set([...draft.reviewFlags, "The selected premise contains an unverified claim."])], verificationStatus: "needs_review" },
+      idea: { ...idea, reviewFlags: [...new Set([...idea.reviewFlags, "The selected premise contains an unverified claim."])], verificationStatus: "needs_review" },
+      selectedCandidateIndex,
+      selectionRationale,
+      worthPublishing: true,
+    };
+  }
+  return { candidates: safeCandidates, draft, idea, selectedCandidateIndex, selectionRationale, worthPublishing: true };
 }
 
 export function requestFingerprint(value: unknown): string {
@@ -259,15 +368,32 @@ export function draftOutputSchema() {
 
 export function preparedPostOutputSchema() {
   const ideas = ideaOutputSchema();
+  const visualSchema = ideas.properties.ideas.items.properties.suggestedVisual;
+  const preparedIdeaSchema = {
+    type: "object", additionalProperties: false,
+    required: ["title", "technicalSubject", "technicalCategory", "formatId", "audience", "editorialPurpose", "engagementStyle", "whyInteresting", "contentAngle", "evidenceSourceItemIds", "verificationStatus", "recommendedPresentation", "suggestedVisual", "reviewFlags", "seriesKey", "seriesPosition"],
+    properties: {
+      title: { type: "string" }, technicalSubject: { type: "string" }, technicalCategory: { type: "string", enum: [...TECHNICAL_CATEGORIES] }, formatId: { type: "string", enum: [...CONTENT_FORMAT_IDS] }, audience: { type: "string", enum: [...AUDIENCE_LEVELS] }, editorialPurpose: { type: "string" }, engagementStyle: { type: "string", enum: [...ENGAGEMENT_STYLES] }, whyInteresting: { type: "string" }, contentAngle: { type: "string" }, evidenceSourceItemIds: { type: "array", items: { type: "string" }, maxItems: 12 }, verificationStatus: { type: "string", enum: [...AI_VERIFICATION_STATUSES] }, recommendedPresentation: { type: "string", enum: [...AI_PRESENTATIONS] }, suggestedVisual: visualSchema, reviewFlags: { type: "array", items: { type: "string" }, maxItems: 12 }, seriesKey: { anyOf: [{ type: "null" }, { type: "string" }] }, seriesPosition: { anyOf: [{ type: "null" }, { type: "integer" }] },
+    },
+  } as const;
+  const candidateSchema = {
+    type: "object", additionalProperties: false,
+    required: ["centralPremise", "interestingReason", "creativeApproach", "readerExperience", "evidenceBasis", "evidenceSourceItemIds", "formatId", "proposedPresentation", "mediaPath", "editorialRisks"],
+    properties: {
+      centralPremise: { type: "string" }, interestingReason: { type: "string" }, creativeApproach: { type: "string" }, readerExperience: { type: "string" }, evidenceBasis: { type: "string", enum: [...AI_EVIDENCE_BASES] }, evidenceSourceItemIds: { type: "array", items: { type: "string" }, maxItems: 12 }, formatId: { type: "string", enum: [...CONTENT_FORMAT_IDS] }, proposedPresentation: { type: "string", enum: [...AI_PRESENTATIONS] }, mediaPath: { type: "string", enum: [...CONTENT_MEDIA_PATHS] }, editorialRisks: { type: "array", items: { type: "string" }, maxItems: 8 },
+    },
+  } as const;
   return {
     type: "object",
     additionalProperties: false,
-    required: ["worthPublishing", "selectionRationale", "idea", "draft"],
+    required: ["worthPublishing", "candidates", "selectedCandidateIndex", "selectionRationale", "idea", "draft"],
     properties: {
       worthPublishing: { type: "boolean" },
+      candidates: { type: "array", minItems: 0, maxItems: 3, items: candidateSchema },
+      selectedCandidateIndex: { anyOf: [{ type: "null" }, { type: "integer" }] },
       selectionRationale: { type: "string" },
-      idea: ideas.properties.ideas.items,
-      draft: draftOutputSchema(),
+      idea: { anyOf: [{ type: "null" }, preparedIdeaSchema] },
+      draft: { anyOf: [{ type: "null" }, draftOutputSchema()] },
     },
   } as const;
 }

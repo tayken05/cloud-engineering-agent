@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { generateDraft, generateIdeaBatch, preparePost } from "@/features/ai-content/service";
 import { prepareDraftGenerationContext } from "@/features/ai-content/draft-context";
-import { AiGenerationError, type AiIdeaRequest, type AiPublicStatus } from "@/features/ai-content/types";
+import { AiGenerationError, type AiIdeaRequest, type AiPublicStatus, type AiResearchEvidence } from "@/features/ai-content/types";
 import { validateDraftRequest, validateIdeaSuggestions } from "@/features/ai-content/validation";
 import type { ContentWorkspaceState, EvidenceReference } from "@/features/content-studio/content-types";
 import { getRequiredOwnerId } from "@/server/auth/owner";
@@ -14,6 +14,8 @@ import { createOpenAiProvider } from "./openai-provider";
 import {
   getAiRunSuggestion,
   getAiSuggestion,
+  listCreativeEvidence,
+  listCreativeMemory,
   listAiEvidence,
   listAiIdeaSuggestions,
   listExistingContentSubjects,
@@ -39,6 +41,8 @@ export type PreparePostActionResult = Readonly<{
   draftId?: string;
   error?: string;
   mediaPath?: "text_only" | "text_first" | "image_first";
+  message?: string;
+  noOpportunity?: boolean;
   ok: boolean;
   state?: ContentWorkspaceState;
 }>;
@@ -61,7 +65,7 @@ function runtime() {
   return { config, provider: createOpenAiProvider(config, readOpenAiApiKey()), store: new PostgresAiRunStore() };
 }
 
-function evidenceReference(item: Awaited<ReturnType<typeof listAiEvidence>>[number]): EvidenceReference {
+function evidenceReference(item: AiResearchEvidence): EvidenceReference {
   return { id: item.id, publishedAt: item.publishedAt, publisher: item.publisher, title: item.title, url: item.url, verificationLabel: "publisher_record" };
 }
 
@@ -86,15 +90,22 @@ export async function prepareAiPostAction(value: unknown): Promise<PreparePostAc
   const ownerId = await getRequiredOwnerId();
   try {
     const { config, provider, store } = runtime();
-    const [evidence, existingContent] = await Promise.all([
-      listAiEvidence({ limit: 20 }),
-      listExistingContentSubjects(ownerId),
+    const [evidence, creativeMemory] = await Promise.all([
+      listCreativeEvidence(16),
+      listCreativeMemory(ownerId, 30),
     ]);
-    const generated = await preparePost({ config, evidence, existingContent, ownerId, provider, request: value, store });
+    const generated = await preparePost({ config, creativeMemory, evidence, ownerId, provider, request: value, store });
     if (generated.duplicate || !generated.output) {
       return { error: "This Prepare a Post request was already processed. Reload the workspace to see its result.", ok: false };
     }
+    if (!generated.output.worthPublishing || !generated.output.idea || !generated.output.draft || generated.output.selectedCandidateIndex === null) {
+      const suggestion = await getAiRunSuggestion(ownerId, generated.runId);
+      if (suggestion) await setAiSuggestionDecision({ feedback: generated.output.selectionRationale, ownerId, status: "rejected", suggestionId: suggestion.id });
+      return { message: generated.output.selectionRationale, noOpportunity: true, ok: true, state: await loadContentWorkspace(ownerId) };
+    }
     const { draft: output, idea, selectionRationale } = generated.output;
+    const selectedCandidate = generated.output.candidates[generated.output.selectedCandidateIndex];
+    if (!selectedCandidate) return { error: "The selected creative opportunity was unavailable after validation.", ok: false };
     const now = new Date().toISOString();
     const ideaId = `idea-${generated.runId}`;
     const draftId = `draft-${crypto.randomUUID()}`;
@@ -104,16 +115,21 @@ export async function prepareAiPostAction(value: unknown): Promise<PreparePostAc
     await savePreparedContentPackage(ownerId, {
       audience: idea.audience,
       createdAt: now,
-      educationalObjective: idea.educationalObjective,
+      educationalObjective: idea.editorialPurpose,
       engagementStyle: idea.engagementStyle,
       evidence: ideaEvidence,
       formatId: idea.formatId,
       id: ideaId,
       notes: [
-        `Prepared by the newsroom. ${idea.whyUseful}`,
+        `Prepared by the newsroom. ${idea.whyInteresting}`,
+        `Central premise: ${selectedCandidate.centralPremise}`,
         `Selected premise: ${selectionRationale}`,
         `Angle: ${idea.contentAngle}`,
+        `Creative approach: ${selectedCandidate.creativeApproach}`,
+        `Reader experience: ${selectedCandidate.readerExperience}`,
+        `Evidence basis: ${selectedCandidate.evidenceBasis}.`,
         `Verification: ${idea.verificationStatus}.`,
+        ...selectedCandidate.editorialRisks.map((risk) => `Editorial risk: ${risk}`),
         ...idea.reviewFlags,
       ].filter(Boolean).join("\n"),
       recordVersion: 1,

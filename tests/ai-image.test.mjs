@@ -27,7 +27,8 @@ test("selected Ask Grok format remains authoritative when developing an attached
   assert.equal(context.draft.formatId, "ask-grok");
   assert.equal(context.idea.id, idea.id);
   assert.equal(context.subject, idea.subject);
-  assert.match(draftInstructions(context.draft.formatId), /specific evidence visible/i);
+  assert.match(draftInstructions(context.draft.formatId), /playful roleplay/i);
+  assert.match(draftInstructions(context.draft.formatId), /Ground image-based questions in inspected pixels/i);
 });
 
 test("starting a new subject detaches stale idea and content without changing selected format", () => {

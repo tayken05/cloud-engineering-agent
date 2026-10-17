@@ -48,6 +48,11 @@ function formatName(value: string): string {
   return value.replaceAll("_", " ").replace(/(^|\s)\S/g, (character) => character.toUpperCase());
 }
 
+function noteValue(notes: string, label: string): string {
+  const line = notes.split("\n").find((entry) => entry.startsWith(label));
+  return line?.slice(label.length).trim() ?? "";
+}
+
 function editorialStatusClass(status: ContentDraft["status"]): string {
   if (status === "approved" || status === "ready_for_review") return "status-chip status-safe";
   if (status === "rejected") return "status-chip status-rejected";
@@ -128,6 +133,7 @@ export function ContentStudioWorkspace({
     ?? workspace.state?.drafts[0]
     ?? null;
   const editing = storedDraft ? draftEdits[storedDraft.id] ?? storedDraft : null;
+  const selectedIdea = editing?.ideaId ? workspace.state.ideas.find((idea) => idea.id === editing.ideaId) ?? null : null;
 
   const format = editing ? getContentFormat(editing.formatId) : null;
   const preparedAssets = editing ? mediaAssets.filter((asset) => asset.draftId === editing.id) : [];
@@ -246,6 +252,11 @@ export function ContentStudioWorkspace({
         direction: prepareDirection.trim(),
         idempotencyKey: `prepare-post:${crypto.randomUUID()}`,
       });
+      if (result.ok && result.noOpportunity) {
+        if (result.state) workspace.replaceState(result.state);
+        setPrepareProgress(result.message ?? "The newsroom found no premise strong enough to prepare. No draft was created and no image was requested.");
+        return;
+      }
       if (!result.ok || !result.state || !result.draftId) {
         setPrepareProgress(result.error ?? "The newsroom could not prepare a validated post.");
         return;
@@ -479,6 +490,7 @@ export function ContentStudioWorkspace({
         <details className="newsroom-review-details">
           <summary>Evidence and technical review</summary>
           <div>
+            {selectedIdea ? <><h3>Why this treatment</h3><p>{noteValue(selectedIdea.notes, "Selected premise:") || selectedIdea.educationalObjective}</p><p><strong>Creative approach:</strong> {noteValue(selectedIdea.notes, "Creative approach:") || "Not recorded for this earlier draft."}</p></> : null}
             <h3>Supporting publisher records</h3>
             {editing.evidence.length ? <ul>{editing.evidence.map((item) => <li key={item.id}><a href={item.url} target="_blank" rel="noreferrer">{item.publisher}: {item.title}</a></li>)}</ul> : <p>No publisher record supports this evergreen package. Factual claims require owner review.</p>}
             <h3>Technical explanation</h3><p className="preserve-lines">{editing.explanation}</p>

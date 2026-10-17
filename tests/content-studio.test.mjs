@@ -59,6 +59,9 @@ test("X preflight validates post, thread, poll, source, and moderator constraint
   assert.ok(askGrok.caption.includes("@grok"));
   assert.ok(askGrok.moderatorNotes.length > 0);
   assert.equal(countXCharacters("cloud ☁️"), 8);
+  assert.equal(countXCharacters("https://example.com/a/very/long/path"), 23);
+  assert.equal(countXCharacters("See https://example.com/a/very/long/path."), 28);
+  assert.equal(countXCharacters("雲"), 2);
   assert.match(validateDraft({ ...askGrok, caption: "x".repeat(281) })[0], /280-character/);
   assert.ok(validateDraft({ ...askGrok, formatId: "breaking-technology-updates", evidence: [] }).some((problem) => /publisher source/.test(problem)));
   assert.ok(validateDraft({ ...askGrok, formatId: "polls-interactive-questions", pollOptions: ["only one"] }).some((problem) => /two to four/.test(problem)));

@@ -22,6 +22,16 @@ export const X_POST_CHARACTER_LIMIT = 280;
 export const X_POLL_OPTION_LIMIT = 25;
 export const FORBIDDEN_POST_DASHES = /[\u2013\u2014]/u;
 
+const X_TRANSFORMED_URL_LENGTH = 23;
+const X_SINGLE_WEIGHT_RANGES = [
+  [0, 4351],
+  [8192, 8205],
+  [8208, 8223],
+  [8242, 8247],
+] as const;
+const X_URL_PATTERN = /(?:https?:\/\/|www\.)[^\s]+/giu;
+const X_TRAILING_URL_PUNCTUATION = /[.,!?;:)}\]]+$/u;
+
 const MAX_IDEAS = 100;
 const MAX_DRAFTS = 100;
 const MAX_REVISIONS = 20;
@@ -177,8 +187,36 @@ export function serializeContentWorkspace(state: ContentWorkspaceState): string 
   return serialized;
 }
 
+function countXTextWeight(value: string): number {
+  let total = 0;
+  const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+  for (const { segment } of segmenter.segment(value)) {
+    if (/\p{Extended_Pictographic}/u.test(segment)) {
+      total += 2;
+      continue;
+    }
+    for (const character of segment) {
+      const point = character.codePointAt(0) ?? 0;
+      total += X_SINGLE_WEIGHT_RANGES.some(([start, end]) => point >= start && point <= end) ? 1 : 2;
+    }
+  }
+  return total;
+}
+
 export function countXCharacters(value: string): number {
-  return Array.from(value.normalize("NFC")).length;
+  const normalized = value.normalize("NFC");
+  let total = 0;
+  let cursor = 0;
+  for (const match of normalized.matchAll(X_URL_PATTERN)) {
+    const index = match.index ?? 0;
+    const rawUrl = match[0];
+    const trailing = rawUrl.match(X_TRAILING_URL_PUNCTUATION)?.[0] ?? "";
+    total += countXTextWeight(normalized.slice(cursor, index));
+    total += X_TRANSFORMED_URL_LENGTH;
+    total += countXTextWeight(trailing);
+    cursor = index + rawUrl.length;
+  }
+  return total + countXTextWeight(normalized.slice(cursor));
 }
 
 export function validateDraft(draft: ContentDraft): readonly string[] {
